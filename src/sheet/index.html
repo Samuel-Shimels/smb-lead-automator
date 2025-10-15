@@ -1,0 +1,1193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SMB Leads - Web Interface</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Custom Styles -->
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .card-hover {
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+        }
+        
+        .card-hover:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+        
+        .stat-card-2 {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        }
+        
+        .stat-card-3 {
+            background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+        }
+        
+        .stat-card-4 {
+            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+        }
+        
+        .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 2s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .table-responsive {
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        
+        .filter-panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }
+        
+        .btn-modern {
+            border-radius: 25px;
+            padding: 10px 25px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-modern:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .tab-button {
+            border-radius: 25px;
+            padding: 10px 20px;
+            margin: 0 5px;
+            transition: all 0.3s ease;
+        }
+        
+        .tab-button.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .form-control:focus, .form-select:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+        }
+        
+        .setting-card {
+            border-left: 4px solid #667eea;
+            transition: all 0.3s ease;
+        }
+        
+        .setting-card:hover {
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            transform: translateY(-2px);
+        }
+        
+        .api-key-input {
+            font-family: 'Courier New', monospace;
+            letter-spacing: 1px;
+        }
+        
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        
+        .status-connected {
+            background-color: #28a745;
+        }
+        
+        .status-disconnected {
+            background-color: #dc3545;
+        }
+        
+        .status-unknown {
+            background-color: #ffc107;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Header -->
+    <header class="gradient-bg text-white py-4">
+        <div class="container mx-auto px-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold">
+                        <i class="fas fa-chart-line mr-2"></i>
+                        SMB Leads Generator
+                    </h1>
+                    <p class="text-blue-100 text-sm">Modern lead generation powered by Apollo.io</p>
+                </div>
+                <div class="flex space-x-2">
+                    <button onclick="refreshData()" class="btn btn-light btn-sm btn-modern">
+                        <i class="fas fa-sync-alt mr-1"></i>Refresh
+                    </button>
+                    <button onclick="exportData()" class="btn btn-outline-light btn-sm btn-modern">
+                        <i class="fas fa-download mr-1"></i>Export
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <div class="container mx-auto px-4 py-4">
+        <div class="text-center mb-4">
+            <button class="tab-button active" onclick="showTab('dashboard')">
+                <i class="fas fa-tachometer-alt mr-2"></i>Dashboard
+            </button>
+            <button class="tab-button" onclick="showTab('fetch')">
+                <i class="fas fa-download mr-2"></i>Fetch Leads
+            </button>
+            <button class="tab-button" onclick="showTab('settings')">
+                <i class="fas fa-cog mr-2"></i>Settings
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="container mx-auto px-4 pb-8">
+        
+        <!-- Dashboard Tab -->
+        <div id="dashboard" class="tab-content active">
+            <!-- Statistics Cards -->
+            <div class="row mb-6">
+                <div class="col-md-3 mb-4">
+                    <div class="card stat-card text-white card-hover">
+                        <div class="card-body text-center">
+                            <i class="fas fa-users fa-2x mb-3"></i>
+                            <h3 class="h4" id="totalLeads">0</h3>
+                            <p class="mb-0">Total Leads</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-4">
+                    <div class="card stat-card-2 text-white card-hover">
+                        <div class="card-body text-center">
+                            <i class="fas fa-handshake fa-2x mb-3"></i>
+                            <h3 class="h4" id="contactedLeads">0</h3>
+                            <p class="mb-0">Contacted</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-4">
+                    <div class="card stat-card-3 text-white card-hover">
+                        <div class="card-body text-center">
+                            <i class="fas fa-building fa-2x mb-3"></i>
+                            <h3 class="h4" id="companies">0</h3>
+                            <p class="mb-0">Companies</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-4">
+                    <div class="card stat-card-4 text-white card-hover">
+                        <div class="card-body text-center">
+                            <i class="fas fa-chart-pie fa-2x mb-3"></i>
+                            <h3 class="h4" id="sectors">0</h3>
+                            <p class="mb-0">Sectors</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filter Panel -->
+            <div class="row mb-6">
+                <div class="col-12">
+                    <div class="card filter-panel">
+                        <div class="card-header bg-transparent border-0">
+                            <h5 class="mb-0">
+                                <i class="fas fa-filter mr-2"></i>Advanced Filters
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-3 mb-3">
+                                    <label class="form-label">Search</label>
+                                    <input type="text" id="searchInput" class="form-control" placeholder="Search leads...">
+                                </div>
+                                <div class="col-md-2 mb-3">
+                                    <label class="form-label">Title</label>
+                                    <select id="titleFilter" class="form-select">
+                                        <option value="">All Titles</option>
+                                        <option value="CEO">CEO</option>
+                                        <option value="Owner">Owner</option>
+                                        <option value="Founder">Founder</option>
+                                        <option value="President">President</option>
+                                        <option value="Co-Founder">Co-Founder</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-2 mb-3">
+                                    <label class="form-label">Company Size</label>
+                                    <select id="sizeFilter" class="form-select">
+                                        <option value="">All Sizes</option>
+                                        <option value="1-10">1-10</option>
+                                        <option value="11-50">11-50</option>
+                                        <option value="51-200">51-200</option>
+                                        <option value="201-500">201-500</option>
+                                        <option value="501-1000">501-1000</option>
+                                        <option value="1000+">1000+</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-2 mb-3">
+                                    <label class="form-label">Sector</label>
+                                    <select id="sectorFilter" class="form-select">
+                                        <option value="">All Sectors</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-2 mb-3">
+                                    <label class="form-label">Status</label>
+                                    <select id="statusFilter" class="form-select">
+                                        <option value="">All Status</option>
+                                        <option value="true">Contacted</option>
+                                        <option value="false">Not Contacted</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-1 mb-3 d-flex align-items-end">
+                                    <button onclick="applyFilters()" class="btn btn-primary btn-modern w-100">
+                                        <i class="fas fa-search"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Loading Indicator -->
+            <div id="loadingIndicator" class="text-center mb-4" style="display: none;">
+                <div class="loading-spinner mx-auto mb-3"></div>
+                <p class="text-muted">Loading data...</p>
+            </div>
+
+            <!-- Results Table -->
+            <div class="row">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header bg-white border-0">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">
+                                    <i class="fas fa-table mr-2"></i>Leads Database
+                                </h5>
+                                <div class="btn-group" role="group">
+                                    <button onclick="sortTable('name')" class="btn btn-outline-primary btn-sm">
+                                        <i class="fas fa-sort-alpha-down mr-1"></i>Name
+                                    </button>
+                                    <button onclick="sortTable('company')" class="btn btn-outline-primary btn-sm">
+                                        <i class="fas fa-building mr-1"></i>Company
+                                    </button>
+                                    <button onclick="sortTable('sector')" class="btn btn-outline-primary btn-sm">
+                                        <i class="fas fa-industry mr-1"></i>Sector
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0" id="leadsTable">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Name</th>
+                                            <th>Title</th>
+                                            <th>Company</th>
+                                            <th>Sector</th>
+                                            <th>Size</th>
+                                            <th>Email</th>
+                                            <th>Phone</th>
+                                            <th>Location</th>
+                                            <th>Status</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="leadsTableBody">
+                                        <!-- Data will be populated here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Fetch Leads Tab -->
+        <div id="fetch" class="tab-content">
+            <div class="row justify-content-center">
+                <div class="col-md-10">
+                    <div class="card">
+                        <div class="card-header gradient-bg text-white">
+                            <h4 class="mb-0">
+                                <i class="fas fa-download mr-2"></i>Fetch New Leads
+                            </h4>
+                            <p class="mb-0 mt-2">Configure your search criteria to fetch leads from Apollo.io</p>
+                        </div>
+                        <div class="card-body p-4">
+                            <form id="fetchForm">
+                                <!-- Roles Section -->
+                                <div class="mb-4">
+                                    <label class="form-label fw-bold">
+                                        <i class="fas fa-user-tie mr-2"></i>Target Roles
+                                    </label>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="roleCEO" value="CEO" checked>
+                                                <label class="form-check-label" for="roleCEO">CEO</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="roleOwner" value="Owner" checked>
+                                                <label class="form-check-label" for="roleOwner">Owner</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="roleFounder" value="Founder" checked>
+                                                <label class="form-check-label" for="roleFounder">Founder</label>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="rolePresident" value="President" checked>
+                                                <label class="form-check-label" for="rolePresident">President</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="roleCoFounder" value="Co-Founder">
+                                                <label class="form-check-label" for="roleCoFounder">Co-Founder</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="roleCTO" value="CTO">
+                                                <label class="form-check-label" for="roleCTO">CTO</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Company Filters -->
+                                <div class="row mb-4">
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-bold">
+                                            <i class="fas fa-building mr-2"></i>Company Size
+                                        </label>
+                                        <select class="form-select" id="fetchCompanySize">
+                                            <option value="">All Sizes</option>
+                                            <option value="1-10">1-10 employees</option>
+                                            <option value="11-50">11-50 employees</option>
+                                            <option value="51-200">51-200 employees</option>
+                                            <option value="201-500">201-500 employees</option>
+                                            <option value="501-1000">501-1000 employees</option>
+                                            <option value="1000+">1000+ employees</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-bold">
+                                            <i class="fas fa-calendar mr-2"></i>Year Founded
+                                        </label>
+                                        <input type="number" class="form-control" id="fetchYearFounded" 
+                                               placeholder="e.g., 2020" min="1900" max="2024">
+                                    </div>
+                                </div>
+
+                                <!-- Industry and Location -->
+                                <div class="row mb-4">
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-bold">
+                                            <i class="fas fa-industry mr-2"></i>Industry/Sector
+                                        </label>
+                                        <select class="form-select" id="fetchIndustry">
+                                            <option value="">All Industries</option>
+                                            <option value="technology">Technology</option>
+                                            <option value="healthcare">Healthcare</option>
+                                            <option value="finance">Finance</option>
+                                            <option value="retail">Retail</option>
+                                            <option value="manufacturing">Manufacturing</option>
+                                            <option value="education">Education</option>
+                                            <option value="real-estate">Real Estate</option>
+                                            <option value="consulting">Consulting</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-bold">
+                                            <i class="fas fa-map-marker-alt mr-2"></i>Location
+                                        </label>
+                                        <input type="text" class="form-control" id="fetchLocation" 
+                                               placeholder="e.g., New York, NY">
+                                    </div>
+                                </div>
+
+                                <!-- Revenue and Advanced Options -->
+                                <div class="row mb-4">
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-bold">
+                                            <i class="fas fa-dollar-sign mr-2"></i>Annual Revenue
+                                        </label>
+                                        <select class="form-select" id="fetchRevenue">
+                                            <option value="">All Revenue Ranges</option>
+                                            <option value="0-100k">$0 - $100K</option>
+                                            <option value="100k-500k">$100K - $500K</option>
+                                            <option value="500k-1m">$500K - $1M</option>
+                                            <option value="1m-5m">$1M - $5M</option>
+                                            <option value="5m+">$5M+</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-bold">
+                                            <i class="fas fa-list mr-2"></i>Number of Leads
+                                        </label>
+                                        <select class="form-select" id="fetchPageSize">
+                                            <option value="25">25 leads</option>
+                                            <option value="50" selected>50 leads</option>
+                                            <option value="100">100 leads</option>
+                                            <option value="200">200 leads</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <!-- Custom Domains -->
+                                <div class="mb-4">
+                                    <label class="form-label fw-bold">
+                                        <i class="fas fa-globe mr-2"></i>Specific Domains (Optional)
+                                    </label>
+                                    <textarea class="form-control" id="fetchDomains" rows="3" 
+                                              placeholder="Enter specific company domains (one per line):&#10;example.com&#10;company.com"></textarea>
+                                    <div class="form-text">Leave empty to search all domains</div>
+                                </div>
+
+                                <!-- Progress Bar -->
+                                <div id="progressSection" class="mb-4" style="display: none;">
+                                    <div class="d-flex align-items-center mb-2">
+                                        <div class="loading-spinner me-3"></div>
+                                        <span class="fw-bold">Fetching leads...</span>
+                                    </div>
+                                    <div class="progress">
+                                        <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                             role="progressbar" style="width: 100%"></div>
+                                    </div>
+                                </div>
+
+                                <!-- Results -->
+                                <div id="resultsSection" class="mb-4" style="display: none;">
+                                    <div class="alert alert-success">
+                                        <h5 class="alert-heading">
+                                            <i class="fas fa-check-circle mr-2"></i>Success!
+                                        </h5>
+                                        <p id="resultsMessage" class="mb-0"></p>
+                                    </div>
+                                </div>
+
+                                <!-- Error -->
+                                <div id="errorSection" class="mb-4" style="display: none;">
+                                    <div class="alert alert-danger">
+                                        <h5 class="alert-heading">
+                                            <i class="fas fa-exclamation-triangle mr-2"></i>Error
+                                        </h5>
+                                        <p id="errorMessage" class="mb-0"></p>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                        <div class="card-footer bg-light">
+                            <div class="d-flex justify-content-between">
+                                <button type="button" class="btn btn-outline-secondary btn-modern" onclick="clearFetchForm()">
+                                    <i class="fas fa-times mr-2"></i>Clear
+                                </button>
+                                <button type="button" class="btn btn-success btn-modern" onclick="fetchLeads()">
+                                    <i class="fas fa-download mr-2"></i>Fetch Leads
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings Tab -->
+        <div id="settings" class="tab-content">
+            <div class="row justify-content-center">
+                <div class="col-md-10">
+                    <div class="card">
+                        <div class="card-header gradient-bg text-white">
+                            <h4 class="mb-0">
+                                <i class="fas fa-cog mr-2"></i>Settings & Configuration
+                            </h4>
+                            <p class="mb-0 mt-2">Configure your Apollo.io API and application preferences</p>
+                        </div>
+                        <div class="card-body p-4">
+                            <!-- API Configuration -->
+                            <div class="card setting-card mb-4">
+                                <div class="card-header bg-transparent">
+                                    <h5 class="mb-0">
+                                        <i class="fas fa-key mr-2"></i>API Configuration
+                                    </h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-8">
+                                            <label class="form-label fw-bold">Apollo.io API Key</label>
+                                            <div class="input-group">
+                                                <input type="password" class="form-control api-key-input" id="apiKey" 
+                                                       placeholder="Enter your Apollo.io API key">
+                                                <button class="btn btn-outline-secondary" type="button" onclick="toggleApiKeyVisibility()">
+                                                    <i class="fas fa-eye" id="toggleIcon"></i>
+                                                </button>
+                                            </div>
+                                            <div class="form-text">
+                                                <i class="fas fa-info-circle mr-1"></i>
+                                                Get your API key from <a href="https://app.apollo.io/settings/integrations" target="_blank">Apollo.io Settings</a>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label fw-bold">Connection Status</label>
+                                            <div class="d-flex align-items-center">
+                                                <span class="status-indicator status-unknown" id="connectionStatus"></span>
+                                                <span id="connectionText">Unknown</span>
+                                            </div>
+                                            <button class="btn btn-outline-primary btn-sm mt-2" onclick="testConnection()">
+                                                <i class="fas fa-plug mr-1"></i>Test Connection
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Fetch Settings -->
+                            <div class="card setting-card mb-4">
+                                <div class="card-header bg-transparent">
+                                    <h5 class="mb-0">
+                                        <i class="fas fa-download mr-2"></i>Fetch Settings
+                                    </h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <label class="form-label fw-bold">Default Page Size</label>
+                                            <select class="form-select" id="defaultPageSize">
+                                                <option value="25">25 leads per request</option>
+                                                <option value="50" selected>50 leads per request</option>
+                                                <option value="100">100 leads per request</option>
+                                                <option value="200">200 leads per request</option>
+                                            </select>
+                                            <div class="form-text">Number of leads to fetch in each API call</div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label fw-bold">Cache Duration</label>
+                                            <select class="form-select" id="cacheDuration">
+                                                <option value="1800">30 minutes</option>
+                                                <option value="3600" selected>1 hour</option>
+                                                <option value="7200">2 hours</option>
+                                                <option value="14400">4 hours</option>
+                                            </select>
+                                            <div class="form-text">How long to cache API responses</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Automation Settings -->
+                            <div class="card setting-card mb-4">
+                                <div class="card-header bg-transparent">
+                                    <h5 class="mb-0">
+                                        <i class="fas fa-robot mr-2"></i>Automation Settings
+                                    </h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="form-check form-switch">
+                                                <input class="form-check-input" type="checkbox" id="autoRefresh">
+                                                <label class="form-check-label fw-bold" for="autoRefresh">
+                                                    Auto Refresh
+                                                </label>
+                                            </div>
+                                            <div class="form-text">Automatically refresh leads data periodically</div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="form-check form-switch">
+                                                <input class="form-check-input" type="checkbox" id="emailNotifications">
+                                                <label class="form-check-label fw-bold" for="emailNotifications">
+                                                    Email Notifications
+                                                </label>
+                                            </div>
+                                            <div class="form-text">Receive email notifications for important events</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Data Management -->
+                            <div class="card setting-card mb-4">
+                                <div class="card-header bg-transparent">
+                                    <h5 class="mb-0">
+                                        <i class="fas fa-database mr-2"></i>Data Management
+                                    </h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <label class="form-label fw-bold">Total Leads in Database</label>
+                                            <div class="input-group">
+                                                <input type="text" class="form-control" id="totalLeadsSettings" readonly>
+                                                <button class="btn btn-outline-info" onclick="refreshStats()">
+                                                    <i class="fas fa-sync-alt"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label fw-bold">Last Updated</label>
+                                            <input type="text" class="form-control" id="lastUpdatedSettings" readonly>
+                                        </div>
+                                    </div>
+                                    <div class="row mt-3">
+                                        <div class="col-12">
+                                            <button class="btn btn-outline-warning me-2" onclick="clearCache()">
+                                                <i class="fas fa-trash mr-2"></i>Clear Cache
+                                            </button>
+                                            <button class="btn btn-outline-danger" onclick="clearAllData()">
+                                                <i class="fas fa-exclamation-triangle mr-2"></i>Clear All Data
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Messages -->
+                            <div id="messageSection" class="mt-4" style="display: none;">
+                                <div class="alert" id="messageAlert">
+                                    <span id="messageText"></span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card-footer bg-light">
+                            <div class="d-flex justify-content-between">
+                                <button type="button" class="btn btn-outline-secondary btn-modern" onclick="loadSettings()">
+                                    <i class="fas fa-undo mr-2"></i>Reset
+                                </button>
+                                <button type="button" class="btn btn-primary btn-modern" onclick="saveSettings()">
+                                    <i class="fas fa-save mr-2"></i>Save Settings
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Custom JavaScript -->
+    <script>
+        let currentLeads = [];
+        let currentFilters = {};
+        let currentSettings = {};
+
+        // Initialize the interface
+        document.addEventListener('DOMContentLoaded', function() {
+            loadData();
+            loadSettings();
+        });
+
+        // Tab Management
+        function showTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Remove active class from all buttons
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // Show selected tab
+            document.getElementById(tabName).classList.add('active');
+            
+            // Add active class to clicked button
+            event.target.classList.add('active');
+            
+            // Load data for dashboard tab
+            if (tabName === 'dashboard') {
+                loadData();
+            }
+        }
+
+        // Load leads data
+        function loadData() {
+            showLoading(true);
+            
+            google.script.run
+                .withSuccessHandler(onDataLoaded)
+                .withFailureHandler(onDataError)
+                .getLeadsData(currentFilters);
+        }
+
+        // Handle successful data load
+        function onDataLoaded(response) {
+            showLoading(false);
+            
+            if (response.success) {
+                currentLeads = response.leads;
+                updateStatistics(response.statistics);
+                populateTable(currentLeads);
+                populateSectorFilter(response.leads);
+            } else {
+                showAlert('Error', response.message, 'danger');
+            }
+        }
+
+        // Handle data load error
+        function onDataError(error) {
+            showLoading(false);
+            showAlert('Error', 'Failed to load data: ' + error, 'danger');
+        }
+
+        // Update statistics cards
+        function updateStatistics(stats) {
+            document.getElementById('totalLeads').textContent = stats.total;
+            document.getElementById('contactedLeads').textContent = stats.contacted;
+            document.getElementById('companies').textContent = new Set(currentLeads.map(lead => lead.company)).size;
+            document.getElementById('sectors').textContent = Object.keys(stats.bySector).length;
+        }
+
+        // Populate leads table
+        function populateTable(leads) {
+            const tbody = document.getElementById('leadsTableBody');
+            tbody.innerHTML = '';
+
+            if (leads.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted">No leads found</td></tr>';
+                return;
+            }
+
+            leads.forEach(lead => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td><strong>${lead.name || 'N/A'}</strong></td>
+                    <td><span class="badge bg-primary">${lead.title || 'N/A'}</span></td>
+                    <td>${lead.company || 'N/A'}</td>
+                    <td>${lead.sector || 'N/A'}</td>
+                    <td>${getCompanySize(lead.employees)}</td>
+                    <td><a href="mailto:${lead.email}" class="text-decoration-none">${lead.email || 'N/A'}</a></td>
+                    <td>${lead.phone || 'N/A'}</td>
+                    <td>${lead.location || 'N/A'}</td>
+                    <td>
+                        <span class="badge ${lead.contacted ? 'bg-success' : 'bg-warning'}">
+                            ${lead.contacted ? 'Contacted' : 'Not Contacted'}
+                        </span>
+                    </td>
+                    <td>
+                        <div class="btn-group btn-group-sm">
+                            <button onclick="toggleContactStatus('${lead.email}', ${!lead.contacted})" 
+                                    class="btn ${lead.contacted ? 'btn-outline-warning' : 'btn-outline-success'}" 
+                                    title="${lead.contacted ? 'Mark as Not Contacted' : 'Mark as Contacted'}">
+                                <i class="fas ${lead.contacted ? 'fa-undo' : 'fa-check'}"></i>
+                            </button>
+                            <button onclick="viewLeadDetails('${lead.email}')" 
+                                    class="btn btn-outline-info" 
+                                    title="View Details">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        // Get company size category
+        function getCompanySize(employees) {
+            if (employees <= 10) return '1-10';
+            if (employees <= 50) return '11-50';
+            if (employees <= 200) return '51-200';
+            if (employees <= 500) return '201-500';
+            if (employees <= 1000) return '501-1000';
+            return '1000+';
+        }
+
+        // Populate sector filter
+        function populateSectorFilter(leads) {
+            const sectors = [...new Set(leads.map(lead => lead.sector).filter(s => s))];
+            const select = document.getElementById('sectorFilter');
+            
+            // Clear existing options except "All Sectors"
+            select.innerHTML = '<option value="">All Sectors</option>';
+            
+            sectors.forEach(sector => {
+                const option = document.createElement('option');
+                option.value = sector;
+                option.textContent = sector;
+                select.appendChild(option);
+            });
+        }
+
+        // Apply filters
+        function applyFilters() {
+            currentFilters = {
+                search: document.getElementById('searchInput').value,
+                title: document.getElementById('titleFilter').value,
+                companySize: document.getElementById('sizeFilter').value,
+                sector: document.getElementById('sectorFilter').value,
+                contacted: document.getElementById('statusFilter').value
+            };
+
+            // Remove empty filters
+            Object.keys(currentFilters).forEach(key => {
+                if (!currentFilters[key]) {
+                    delete currentFilters[key];
+                }
+            });
+
+            loadData();
+        }
+
+        // Fetch new leads
+        function fetchLeads() {
+            const roles = Array.from(document.querySelectorAll('#fetch input[type="checkbox"]:checked')).map(cb => cb.value);
+            const size = document.getElementById('fetchCompanySize').value;
+            const year = document.getElementById('fetchYearFounded').value;
+            const industry = document.getElementById('fetchIndustry').value;
+            const location = document.getElementById('fetchLocation').value;
+            const revenue = document.getElementById('fetchRevenue').value;
+            const pageSize = document.getElementById('fetchPageSize').value;
+            const domains = document.getElementById('fetchDomains').value.split('\n').filter(d => d.trim());
+
+            const filters = {
+                roles: roles,
+                companySize: size,
+                yearFounded: year ? parseInt(year) : undefined,
+                industry: industry,
+                location: location,
+                revenue: revenue,
+                perPage: parseInt(pageSize),
+                domains: domains
+            };
+
+            showFetchProgress(true);
+
+            google.script.run
+                .withSuccessHandler(onFetchSuccess)
+                .withFailureHandler(onFetchError)
+                .fetchLeads(filters);
+        }
+
+        // Handle fetch success
+        function onFetchSuccess(response) {
+            showFetchProgress(false);
+            
+            if (response.success) {
+                showFetchMessage('Success', response.message, 'success');
+                // Switch to dashboard and refresh data
+                setTimeout(() => {
+                    showTab('dashboard');
+                    loadData();
+                }, 2000);
+            } else {
+                showFetchMessage('Error', response.message, 'danger');
+            }
+        }
+
+        // Handle fetch error
+        function onFetchError(error) {
+            showFetchProgress(false);
+            showFetchMessage('Error', 'Failed to fetch leads: ' + error, 'danger');
+        }
+
+        // Show/hide fetch progress
+        function showFetchProgress(show) {
+            document.getElementById('progressSection').style.display = show ? 'block' : 'none';
+            document.getElementById('resultsSection').style.display = 'none';
+            document.getElementById('errorSection').style.display = 'none';
+        }
+
+        // Show fetch message
+        function showFetchMessage(title, message, type) {
+            const section = type === 'success' ? 'resultsSection' : 'errorSection';
+            const messageElement = type === 'success' ? 'resultsMessage' : 'errorMessage';
+            
+            document.getElementById(messageElement).textContent = message;
+            document.getElementById(section).style.display = 'block';
+        }
+
+        // Clear fetch form
+        function clearFetchForm() {
+            document.getElementById('fetchForm').reset();
+            document.getElementById('resultsSection').style.display = 'none';
+            document.getElementById('errorSection').style.display = 'none';
+        }
+
+        // Toggle contact status
+        function toggleContactStatus(email, contacted) {
+            google.script.run
+                .withSuccessHandler(response => {
+                    if (response.success) {
+                        showAlert('Success', response.message, 'success');
+                        loadData(); // Reload data
+                    } else {
+                        showAlert('Error', response.message, 'danger');
+                    }
+                })
+                .withFailureHandler(error => {
+                    showAlert('Error', 'Failed to update status: ' + error, 'danger');
+                })
+                .updateLeadStatus(email, contacted);
+        }
+
+        // View lead details
+        function viewLeadDetails(email) {
+            const lead = currentLeads.find(l => l.email === email);
+            if (lead) {
+                const details = `
+                    <strong>Name:</strong> ${lead.name}<br>
+                    <strong>Title:</strong> ${lead.title}<br>
+                    <strong>Company:</strong> ${lead.company}<br>
+                    <strong>Sector:</strong> ${lead.sector}<br>
+                    <strong>Employees:</strong> ${lead.employees}<br>
+                    <strong>Capital:</strong> $${lead.capital?.toLocaleString() || 'N/A'}<br>
+                    <strong>Year Founded:</strong> ${lead.yearFounded || 'N/A'}<br>
+                    <strong>Email:</strong> ${lead.email}<br>
+                    <strong>Phone:</strong> ${lead.phone || 'N/A'}<br>
+                    <strong>Location:</strong> ${lead.location || 'N/A'}<br>
+                    <strong>Website:</strong> ${lead.website ? `<a href="${lead.website}" target="_blank">${lead.website}</a>` : 'N/A'}<br>
+                    <strong>LinkedIn:</strong> ${lead.linkedinUrl ? `<a href="${lead.linkedinUrl}" target="_blank">${lead.linkedinUrl}</a>` : 'N/A'}
+                `;
+                
+                showAlert('Lead Details', details, 'info');
+            }
+        }
+
+        // Sort table
+        function sortTable(column) {
+            currentLeads.sort((a, b) => {
+                const aVal = a[column] || '';
+                const bVal = b[column] || '';
+                return aVal.localeCompare(bVal);
+            });
+            populateTable(currentLeads);
+        }
+
+        // Refresh data
+        function refreshData() {
+            loadData();
+        }
+
+        // Export data
+        function exportData() {
+            google.script.run
+                .withSuccessHandler(response => {
+                    if (response.success) {
+                        showAlert('Success', 'Data exported successfully!', 'success');
+                    } else {
+                        showAlert('Error', response.message, 'danger');
+                    }
+                })
+                .withFailureHandler(error => {
+                    showAlert('Error', 'Failed to export data: ' + error, 'danger');
+                })
+                .exportToCSV();
+        }
+
+        // Settings functions
+        function loadSettings() {
+            google.script.run
+                .withSuccessHandler(onSettingsLoaded)
+                .withFailureHandler(onSettingsError)
+                .getSettings();
+        }
+
+        function onSettingsLoaded(response) {
+            if (response.success) {
+                currentSettings = response.settings;
+                populateSettingsForm(currentSettings);
+            } else {
+                showMessage('Error loading settings: ' + response.message, 'danger');
+            }
+        }
+
+        function onSettingsError(error) {
+            showMessage('Failed to load settings: ' + error, 'danger');
+        }
+
+        function populateSettingsForm(settings) {
+            document.getElementById('apiKey').value = settings['Apollo API Key'] || '';
+            document.getElementById('defaultPageSize').value = settings['Default Page Size'] || '50';
+            document.getElementById('cacheDuration').value = settings['Cache Duration'] || '3600';
+            document.getElementById('autoRefresh').checked = settings['Auto Refresh'] === 'TRUE';
+            document.getElementById('emailNotifications').checked = settings['Email Notifications'] === 'TRUE';
+            document.getElementById('totalLeadsSettings').value = settings['Total Leads'] || '0';
+            document.getElementById('lastUpdatedSettings').value = settings['Last Updated'] || 'Never';
+        }
+
+        function saveSettings() {
+            const settings = {
+                'Apollo API Key': document.getElementById('apiKey').value,
+                'Default Page Size': document.getElementById('defaultPageSize').value,
+                'Cache Duration': document.getElementById('cacheDuration').value,
+                'Auto Refresh': document.getElementById('autoRefresh').checked ? 'TRUE' : 'FALSE',
+                'Email Notifications': document.getElementById('emailNotifications').checked ? 'TRUE' : 'FALSE'
+            };
+
+            google.script.run
+                .withSuccessHandler(onSaveSuccess)
+                .withFailureHandler(onSaveError)
+                .saveSettings(settings);
+        }
+
+        function onSaveSuccess(response) {
+            if (response.success) {
+                showMessage('Settings saved successfully!', 'success');
+            } else {
+                showMessage('Error saving settings: ' + response.message, 'danger');
+            }
+        }
+
+        function onSaveError(error) {
+            showMessage('Failed to save settings: ' + error, 'danger');
+        }
+
+        function toggleApiKeyVisibility() {
+            const apiKeyInput = document.getElementById('apiKey');
+            const toggleIcon = document.getElementById('toggleIcon');
+            
+            if (apiKeyInput.type === 'password') {
+                apiKeyInput.type = 'text';
+                toggleIcon.className = 'fas fa-eye-slash';
+            } else {
+                apiKeyInput.type = 'password';
+                toggleIcon.className = 'fas fa-eye';
+            }
+        }
+
+        function testConnection() {
+            const apiKey = document.getElementById('apiKey').value;
+            if (!apiKey) {
+                showMessage('Please enter your API key first', 'warning');
+                return;
+            }
+
+            document.getElementById('connectionStatus').className = 'status-indicator status-unknown';
+            document.getElementById('connectionText').textContent = 'Testing...';
+
+            google.script.run
+                .withSuccessHandler(onConnectionTestSuccess)
+                .withFailureHandler(onConnectionTestError)
+                .testApolloConnection(apiKey);
+        }
+
+        function onConnectionTestSuccess(response) {
+            if (response.success) {
+                document.getElementById('connectionStatus').className = 'status-indicator status-connected';
+                document.getElementById('connectionText').textContent = 'Connected';
+                showMessage('API connection successful!', 'success');
+            } else {
+                document.getElementById('connectionStatus').className = 'status-indicator status-disconnected';
+                document.getElementById('connectionText').textContent = 'Failed';
+                showMessage('API connection failed: ' + response.message, 'danger');
+            }
+        }
+
+        function onConnectionTestError(error) {
+            document.getElementById('connectionStatus').className = 'status-indicator status-disconnected';
+            document.getElementById('connectionText').textContent = 'Error';
+            showMessage('Connection test failed: ' + error, 'danger');
+        }
+
+        function refreshStats() {
+            loadSettings();
+            showMessage('Statistics refreshed', 'info');
+        }
+
+        function clearCache() {
+            if (confirm('Are you sure you want to clear the cache? This will force fresh API calls on next fetch.')) {
+                google.script.run
+                    .withSuccessHandler(() => showMessage('Cache cleared successfully', 'success'))
+                    .withFailureHandler(error => showMessage('Failed to clear cache: ' + error, 'danger'))
+                    .clearApolloCache();
+            }
+        }
+
+        function clearAllData() {
+            if (confirm('Are you sure you want to clear ALL leads data? This action cannot be undone!')) {
+                google.script.run
+                    .withSuccessHandler(() => {
+                        showMessage('All data cleared successfully', 'success');
+                        refreshStats();
+                    })
+                    .withFailureHandler(error => showMessage('Failed to clear data: ' + error, 'danger'))
+                    .clearAllLeads();
+            }
+        }
+
+        // Utility functions
+        function showLoading(show) {
+            document.getElementById('loadingIndicator').style.display = show ? 'block' : 'none';
+        }
+
+        function showAlert(title, message, type) {
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+            alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+            alertDiv.innerHTML = `
+                <strong>${title}</strong><br>${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            
+            document.body.appendChild(alertDiv);
+            
+            setTimeout(() => {
+                if (alertDiv.parentNode) {
+                    alertDiv.parentNode.removeChild(alertDiv);
+                }
+            }, 5000);
+        }
+
+        function showMessage(text, type) {
+            const messageSection = document.getElementById('messageSection');
+            const messageAlert = document.getElementById('messageAlert');
+            const messageText = document.getElementById('messageText');
+            
+            messageAlert.className = `alert alert-${type}`;
+            messageText.textContent = text;
+            messageSection.style.display = 'block';
+            
+            setTimeout(() => {
+                messageSection.style.display = 'none';
+            }, 5000);
+        }
+    </script>
+</body>
+</html>

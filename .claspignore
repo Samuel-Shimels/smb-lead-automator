@@ -1,0 +1,38 @@
+# Ignore files that shouldn't be deployed to Google Apps Script
+**/**
+!src/**
+!appsscript.json
+
+# Node modules
+node_modules/
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+README.md
+*.md
+
+# Deployment files
+deploy.js
+package.json
+package-lock.json
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/

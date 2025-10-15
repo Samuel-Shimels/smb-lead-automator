@@ -1,7 +1,6 @@
 {
-  "scriptId": "1VyEllua_Vb9zN8gZK2dZpchPhEzvcG1ZuT9nNVAxwrwwYNoiP5n3X38c",
-  "rootDir": "src/sheet",
-  "parentId": "1UFmqNUhPyJ3bg5gxp4hnEPXwoRNvprbnNwdesjXOfGI",
+  "scriptId": "1Xk6fpRBgXd3SKlMTEe3bnrV6Psv9jrWMAXEqe28l5_nkfWbQHD1uw6CX",
+  "rootDir": "src/library",
   "scriptExtensions": [
     ".js",
     ".gs"

@@ -1,7 +1,4 @@
 # Ignore files that shouldn't be deployed to Google Apps Script
-**/**
-!src/**
-!appsscript.json
 
 # Node modules
 node_modules/
@@ -13,11 +10,6 @@ node_modules/
 # Documentation
 README.md
 *.md
-
-# Deployment files
-deploy.js
-package.json
-package-lock.json
 
 # IDE files
 .vscode/

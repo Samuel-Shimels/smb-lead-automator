@@ -7,9 +7,22 @@
 // ===== CONFIGURATION =====
 
 function getSheetId() {
-  const id = PropertiesService.getScriptProperties().getProperty('SMB_LEAD_SHEET_ID');
-  if (!id) throw new Error('SMB_LEAD_SHEET_ID not set in Script Properties');
-  return id;
+  // For sheet-bound scripts, use the current spreadsheet ID
+  return SpreadsheetApp.getActiveSpreadsheet().getId();
+}
+
+/**
+ * Get web app URL for the deployed script
+ */
+function getWebAppUrl() {
+  try {
+    // Try to get the web app URL from the script
+    const scriptId = ScriptApp.getScriptId();
+    return `https://script.google.com/macros/s/${scriptId}/exec`;
+  } catch (error) {
+    console.error('Error getting web app URL:', error);
+    return null;
+  }
 }
 
 // ===== WEB APP ENTRY POINT =====
@@ -152,9 +165,83 @@ function onOpen() {
 function initSheetsApi() {
   try {
     const spreadsheetId = getSheetId();
-    return LeadLib.initSheets(spreadsheetId);
+    
+    // Check if LeadLib is available
+    if (typeof LeadLib !== 'undefined' && LeadLib.initSheets) {
+      return LeadLib.initSheets(spreadsheetId);
+    } else {
+      console.warn('LeadLib not available, using fallback initialization');
+      return initSheetsFallback(spreadsheetId);
+    }
   } catch (error) {
     console.error('initSheetsApi error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Fallback initialization when LeadLib is not available
+ */
+function initSheetsFallback(spreadsheetId) {
+  try {
+    const ss = SpreadsheetApp.openById(spreadsheetId);
+    
+    // Initialize Leads sheet
+    let leadsSheet = ss.getSheetByName('Leads');
+    if (!leadsSheet) {
+      leadsSheet = ss.insertSheet('Leads');
+    }
+    leadsSheet.clear();
+    
+    const leadsHeaders = [
+      'Timestamp', 'Lead Name', 'Title', 'Company Name', 'Industry',
+      'Employees', 'Founded Year', 'Email', 'Phone', 'Location',
+      'LinkedIn', 'Website', 'Description', 'Contacted', 'Source'
+    ];
+    leadsSheet.getRange(1, 1, 1, leadsHeaders.length).setValues([leadsHeaders]);
+    
+    // Format header row
+    const leadsHeaderRange = leadsSheet.getRange(1, 1, 1, leadsHeaders.length);
+    leadsHeaderRange.setBackground('#4285f4');
+    leadsHeaderRange.setFontColor('white');
+    leadsHeaderRange.setFontWeight('bold');
+    leadsHeaderRange.setHorizontalAlignment('center');
+    
+    // Initialize Settings sheet
+    let settingsSheet = ss.getSheetByName('Settings');
+    if (!settingsSheet) {
+      settingsSheet = ss.insertSheet('Settings');
+    }
+    settingsSheet.clear();
+    
+    const settingsData = [
+      ['Setting', 'Value', 'Description'],
+      ['Apollo API Key', '', 'Your Apollo.io API key'],
+      ['Default Page Size', '25', 'Number of leads to fetch per request'],
+      ['Cache Duration', '3600', 'Cache duration in seconds'],
+      ['Auto Refresh', 'FALSE', 'Automatically refresh leads'],
+      ['Last Updated', '', 'Last successful data fetch'],
+      ['Total Leads', '0', 'Total number of leads in database']
+    ];
+    settingsSheet.getRange(1, 1, settingsData.length, 3).setValues(settingsData);
+    
+    // Format settings header row
+    const settingsHeaderRange = settingsSheet.getRange(1, 1, 1, 3);
+    settingsHeaderRange.setBackground('#34a853');
+    settingsHeaderRange.setFontColor('white');
+    settingsHeaderRange.setFontWeight('bold');
+    settingsHeaderRange.setHorizontalAlignment('center');
+    
+    console.log('Fallback initialization completed');
+    return { 
+      success: true, 
+      leadsSheet: true,
+      settingsSheet: true,
+      message: 'Sheets initialized successfully (fallback mode)' 
+    };
+    
+  } catch (error) {
+    console.error('Fallback initialization error:', error);
     return { success: false, error: error.message };
   }
 }
@@ -524,11 +611,17 @@ function clearAllLeadsApi() {
  * Show fetch leads dialog
  */
 function showFetchLeadsDialog() {
-  const html = HtmlService.createHtmlOutputFromFile('index')
-    .setWidth(600)
-    .setHeight(500);
-  
-  SpreadsheetApp.getUi().showModalDialog(html, 'Fetch Leads');
+  try {
+    const html = HtmlService.createHtmlOutputFromFile('index')
+      .setWidth(600)
+      .setHeight(500);
+    
+    SpreadsheetApp.getUi().showModalDialog(html, 'Fetch Leads');
+  } catch (error) {
+    console.error('Error showing fetch leads dialog:', error);
+    // Fallback: open web interface
+    openWebInterface();
+  }
 }
 
 /**
@@ -536,14 +629,35 @@ function showFetchLeadsDialog() {
  */
 function openWebInterface() {
   try {
+    // Try modal dialog first
     const html = HtmlService.createHtmlOutputFromFile('index')
       .setWidth(1200)
       .setHeight(800);
     
     SpreadsheetApp.getUi().showModalDialog(html, 'SMB Leads - Web Interface');
   } catch (error) {
-    console.error('Error opening web interface:', error);
-    SpreadsheetApp.getUi().alert('Error', 'Failed to open web interface: ' + error.message, SpreadsheetApp.getUi().ButtonSet.OK);
+    console.error('Modal dialog failed, trying alternative approach:', error);
+    
+    try {
+      // Alternative: Open in new tab/window using web app URL
+      const webAppUrl = getWebAppUrl();
+      if (webAppUrl) {
+        SpreadsheetApp.getUi().alert(
+          'Open Web Interface',
+          'Please click OK to open the web interface in a new tab:\n\n' + webAppUrl,
+          SpreadsheetApp.getUi().ButtonSet.OK
+        );
+      } else {
+        throw new Error('Web app URL not available');
+      }
+    } catch (altError) {
+      console.error('Alternative approach also failed:', altError);
+      SpreadsheetApp.getUi().alert(
+        'Error', 
+        'Failed to open web interface. Please check the script permissions and try again.\n\nError: ' + error.message, 
+        SpreadsheetApp.getUi().ButtonSet.OK
+      );
+    }
   }
 }
 
@@ -599,11 +713,17 @@ function clearAllLeads() {
  * Show settings dialog
  */
 function showSettingsDialog() {
-  const html = HtmlService.createHtmlOutputFromFile('index')
-    .setWidth(500)
-    .setHeight(400);
-  
-  SpreadsheetApp.getUi().showModalDialog(html, 'Settings');
+  try {
+    const html = HtmlService.createHtmlOutputFromFile('index')
+      .setWidth(500)
+      .setHeight(400);
+    
+    SpreadsheetApp.getUi().showModalDialog(html, 'Settings');
+  } catch (error) {
+    console.error('Error showing settings dialog:', error);
+    // Fallback: open web interface
+    openWebInterface();
+  }
 }
 
 /**

@@ -8,10 +8,5 @@
     "https://www.googleapis.com/auth/drive.readonly",
     "https://www.googleapis.com/auth/userinfo.email",
     "https://www.googleapis.com/auth/script.external_request"
-  ],
-  "library": {
-    "name": "LeadLib",
-    "version": "1",
-    "description": "SMB Lead Generation Library for Apollo.io API integration and data processing"
-  }
+  ]
 }

@@ -1,199 +1,275 @@
 /**
  * Apollo.io API Integration Library
  * Handles API calls, data fetching, and response processing
+ * LeadLib Library - Version 1
  */
 
-class ApolloAPI {
-  constructor() {
-    this.baseUrl = 'https://api.apollo.io/v1';
-    this.apiKey = PropertiesService.getUserProperties().getProperty('APOLLO_API_KEY');
-    this.cache = CacheService.getScriptCache();
-  }
+// ===== LEADLIB NAMESPACE =====
 
-  /**
-   * Fetch leads from Apollo.io API with filters
-   * @param {Object} filters - Filter criteria
-   * @returns {Array} Array of lead objects
-   */
-  fetchLeads(filters) {
-    try {
-      const cacheKey = this._generateCacheKey(filters);
-      const cachedData = this.getCachedLeads(cacheKey);
-      
-      if (cachedData && cachedData.length > 0) {
-        console.log('Returning cached leads');
-        return cachedData;
-      }
+var LeadLib = LeadLib || {};
 
-      const payload = this._buildPayload(filters);
-      const response = this._makeApiCall('/mixed_people/search', payload);
-      
-      if (response && response.people) {
-        const leads = this._processApiResponse(response.people);
-        this.cacheLeads(leads, cacheKey);
-        return leads;
-      }
-      
-      return [];
-    } catch (error) {
-      console.error('Error fetching leads:', error);
-      throw new Error('Failed to fetch leads from Apollo.io');
-    }
-  }
+LeadLib.ApolloAPI = function() {
+  this.baseUrl = 'https://api.apollo.io/v1';
+  this.apiKey = PropertiesService.getUserProperties().getProperty('APOLLO_API_KEY');
+  this.cache = CacheService.getScriptCache();
+};
 
-  /**
-   * Build API payload from filters
-   * @param {Object} filters - Filter criteria
-   * @returns {Object} API payload
-   */
-  _buildPayload(filters) {
-    const payload = {
-      api_key: this.apiKey,
-      q_organization_domains: filters.domains || [],
-      person_titles: filters.roles || ['CEO', 'Owner', 'Founder', 'President'],
-      organization_num_employees_ranges: this._mapCompanySize(filters.companySize),
-      organization_locations: filters.locations || [],
-      page: filters.page || 1,
-      per_page: filters.perPage || 25
-    };
-
-    // Add sector filter if provided
-    if (filters.sector) {
-      payload.organization_industry_tag_ids = [filters.sector];
-    }
-
-    // Add year founded filter
-    if (filters.yearFounded) {
-      payload.organization_founded_year = filters.yearFounded;
-    }
-
-    // Add capital/revenue filter
-    if (filters.capital) {
-      payload.organization_annual_revenue_ranges = this._mapCapitalRange(filters.capital);
-    }
-
-    return payload;
-  }
-
-  /**
-   * Map company size to Apollo.io format
-   * @param {String} companySize - Company size filter
-   * @returns {Array} Apollo.io employee range
-   */
-  _mapCompanySize(companySize) {
-    const sizeMap = {
-      '1-10': ['1,10'],
-      '11-50': ['11,50'],
-      '51-200': ['51,200'],
-      '201-500': ['201,500'],
-      '501-1000': ['501,1000'],
-      '1000+': ['1001,10000']
-    };
-    return sizeMap[companySize] || [];
-  }
-
-  /**
-   * Map capital range to Apollo.io format
-   * @param {String} capital - Capital filter
-   * @returns {Array} Apollo.io revenue range
-   */
-  _mapCapitalRange(capital) {
-    const capitalMap = {
-      '0-100k': ['0,100000'],
-      '100k-500k': ['100000,500000'],
-      '500k-1m': ['500000,1000000'],
-      '1m-5m': ['1000000,5000000'],
-      '5m+': ['5000000,100000000']
-    };
-    return capitalMap[capital] || [];
-  }
-
-  /**
-   * Make API call to Apollo.io
-   * @param {String} endpoint - API endpoint
-   * @param {Object} payload - Request payload
-   * @returns {Object} API response
-   */
-  _makeApiCall(endpoint, payload) {
-    const options = {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Cache-Control': 'no-cache'
-      },
-      payload: JSON.stringify(payload)
-    };
-
-    const response = UrlFetchApp.fetch(this.baseUrl + endpoint, options);
+/**
+ * Fetch leads from Apollo.io API with filters
+ * @param {Object} filters - Filter criteria
+ * @returns {Array} Array of lead objects
+ */
+LeadLib.ApolloAPI.prototype.fetchLeads = function(filters) {
+  try {
+    const cacheKey = this._generateCacheKey(filters);
+    const cachedData = this.getCachedLeads(cacheKey);
     
-    if (response.getResponseCode() !== 200) {
-      throw new Error(`API call failed with status: ${response.getResponseCode()}`);
+    if (cachedData && cachedData.length > 0) {
+      console.log('Returning cached leads');
+      return cachedData;
     }
 
-    return JSON.parse(response.getContentText());
+    const payload = this._buildPayload(filters);
+    const response = this._makeApiCall('/mixed_people/search', payload);
+    
+    if (response && response.people) {
+      const leads = this._processApiResponse(response.people);
+      this.cacheLeads(leads, cacheKey);
+      return leads;
+    }
+    
+    return [];
+  } catch (error) {
+    console.error('Error fetching leads:', error);
+    throw new Error('Failed to fetch leads from Apollo.io');
   }
+};
 
-  /**
-   * Process API response and extract lead data
-   * @param {Array} people - People data from API
-   * @returns {Array} Processed leads
-   */
-  _processApiResponse(people) {
-    return people.map(person => ({
-      id: person.id,
-      name: person.name,
-      title: person.title,
-      company: person.organization?.name || '',
-      sector: person.organization?.industry || '',
-      employees: person.organization?.estimated_num_employees || 0,
-      capital: person.organization?.annual_revenue || 0,
-      yearFounded: person.organization?.founded_year || null,
-      email: person.email || '',
-      linkedinUrl: person.linkedin_url || '',
-      phone: person.phone_numbers?.[0]?.sanitized_number || '',
-      location: person.city + ', ' + person.state || '',
-      website: person.organization?.website_url || '',
-      lastUpdated: new Date()
-    }));
+/**
+ * Build API payload from filters
+ * @param {Object} filters - Filter criteria
+ * @returns {Object} API payload
+ */
+LeadLib.ApolloAPI.prototype._buildPayload = function(filters) {
+  const payload = {
+    api_key: this.apiKey,
+    q_organization_domains: filters.domains || '',
+    person_titles: filters.roles || ['CEO', 'Owner', 'Founder', 'President'],
+    organization_num_employees_ranges: filters.employeeRanges || '',
+    organization_industry_tag_ids: filters.industryTags || '',
+    organization_locations: filters.locations || '',
+    organization_founded_year: filters.foundedYear || '',
+    page: filters.page || 1,
+    per_page: Math.min(filters.perPage || 25, 100)
+  };
+
+  // Remove empty values
+  Object.keys(payload).forEach(key => {
+    if (!payload[key] || payload[key] === '') {
+      delete payload[key];
+    }
+  });
+
+  return payload;
+};
+
+/**
+ * Make API call to Apollo.io
+ * @param {string} endpoint - API endpoint
+ * @param {Object} payload - Request payload
+ * @returns {Object} API response
+ */
+LeadLib.ApolloAPI.prototype._makeApiCall = function(endpoint, payload) {
+  const url = this.baseUrl + endpoint;
+  const options = {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-cache'
+    },
+    payload: JSON.stringify(payload)
+  };
+
+  let retries = 0;
+  while (retries < 3) {
+    try {
+      const response = UrlFetchApp.fetch(url, options);
+      const responseCode = response.getResponseCode();
+      
+      if (responseCode === 200) {
+        return JSON.parse(response.getContentText());
+      } else if (responseCode === 429) {
+        // Rate limit - wait and retry
+        console.log('Rate limited, waiting...');
+        Utilities.sleep(2000);
+        retries++;
+      } else {
+        console.error('API Error:', responseCode, response.getContentText());
+        throw new Error('API request failed with code: ' + responseCode);
+      }
+    } catch (error) {
+      retries++;
+      if (retries >= 3) {
+        throw error;
+      }
+      console.log('Retrying API call...');
+      Utilities.sleep(1000);
+    }
   }
+};
 
-  /**
-   * Generate cache key from filters
-   * @param {Object} filters - Filter criteria
-   * @returns {String} Cache key
-   */
-  _generateCacheKey(filters) {
-    return 'leads_' + Utilities.base64Encode(JSON.stringify(filters));
+/**
+ * Process API response and extract lead data
+ * @param {Array} people - People data from API
+ * @returns {Array} Processed leads
+ */
+LeadLib.ApolloAPI.prototype._processApiResponse = function(people) {
+  return people.map(person => ({
+    id: person.id || '',
+    name: person.name || '',
+    title: person.title || '',
+    company: person.organization?.name || '',
+    industry: person.organization?.industry || '',
+    employees: person.organization?.estimated_num_employees || 0,
+    foundedYear: person.organization?.founded_year || '',
+    email: person.email || '',
+    phone: person.phone_numbers?.[0]?.sanitized_number || '',
+    location: person.city + ', ' + person.state || '',
+    linkedin: person.linkedin_url || '',
+    website: person.organization?.website_url || '',
+    description: person.organization?.short_description || '',
+    lastUpdated: new Date().toISOString(),
+    contacted: false
+  }));
+};
+
+/**
+ * Generate cache key from filters
+ * @param {Object} filters - Filter criteria
+ * @returns {string} Cache key
+ */
+LeadLib.ApolloAPI.prototype._generateCacheKey = function(filters) {
+  const keyData = {
+    roles: filters.roles || [],
+    employeeRanges: filters.employeeRanges || [],
+    industryTags: filters.industryTags || [],
+    locations: filters.locations || [],
+    foundedYear: filters.foundedYear || '',
+    page: filters.page || 1
+  };
+  
+  return 'apollo_leads_' + Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, JSON.stringify(keyData));
+};
+
+/**
+ * Cache leads data
+ * @param {Array} leads - Leads to cache
+ * @param {string} key - Cache key
+ */
+LeadLib.ApolloAPI.prototype.cacheLeads = function(leads, key) {
+  try {
+    const cacheData = {
+      leads: leads,
+      timestamp: new Date().getTime(),
+      count: leads.length
+    };
+    
+    this.cache.put(key, JSON.stringify(cacheData), 3600); // 1 hour
+    console.log('Leads cached with key:', key);
+  } catch (error) {
+    console.error('Error caching leads:', error);
   }
+};
 
-  /**
-   * Cache leads data
-   * @param {Array} leads - Leads to cache
-   * @param {String} key - Cache key
-   */
-  cacheLeads(leads, key) {
-    this.cache.put(key, JSON.stringify(leads), 3600); // 1 hour cache
-  }
-
-  /**
-   * Get cached leads
-   * @param {String} key - Cache key
-   * @returns {Array} Cached leads
-   */
-  getCachedLeads(key) {
+/**
+ * Get cached leads
+ * @param {string} key - Cache key
+ * @returns {Array} Cached leads or empty array
+ */
+LeadLib.ApolloAPI.prototype.getCachedLeads = function(key) {
+  try {
     const cached = this.cache.get(key);
-    return cached ? JSON.parse(cached) : null;
+    if (cached) {
+      const cacheData = JSON.parse(cached);
+      const age = new Date().getTime() - cacheData.timestamp;
+      
+      // Check if cache is still valid (1 hour)
+      if (age < 3600000) {
+        console.log('Cache hit for key:', key);
+        return cacheData.leads;
+      } else {
+        console.log('Cache expired for key:', key);
+        this.cache.remove(key);
+      }
+    }
+  } catch (error) {
+    console.error('Error reading cache:', error);
   }
+  
+  return [];
+};
 
-  /**
-   * Clear cache
-   */
-  clearCache() {
-    this.cache.removeAll(['leads_']);
+/**
+ * Clear all cached leads
+ */
+LeadLib.ApolloAPI.prototype.clearCache = function() {
+  try {
+    const keys = this.cache.getKeys();
+    keys.forEach(key => {
+      if (key.startsWith('apollo_leads_')) {
+        this.cache.remove(key);
+      }
+    });
+    console.log('Apollo cache cleared');
+  } catch (error) {
+    console.error('Error clearing cache:', error);
   }
-}
+};
 
-// Export for use in other files
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = ApolloAPI;
-}
+/**
+ * Get API usage statistics
+ * @returns {Object} Usage stats
+ */
+LeadLib.ApolloAPI.prototype.getUsageStats = function() {
+  try {
+    const response = this._makeApiCall('/usage', { api_key: this.apiKey });
+    return {
+      monthly_usage: response.monthly_usage || 0,
+      monthly_limit: response.monthly_limit || 0,
+      daily_usage: response.daily_usage || 0,
+      daily_limit: response.daily_limit || 0
+    };
+  } catch (error) {
+    console.error('Error getting usage stats:', error);
+    return null;
+  }
+};
+
+// ===== CONVENIENCE FUNCTIONS =====
+
+/**
+ * Fetch leads with default filters
+ * @param {Object} options - Filter options
+ * @returns {Array} Array of leads
+ */
+LeadLib.fetchLeads = function(options) {
+  const api = new LeadLib.ApolloAPI();
+  return api.fetchLeads(options);
+};
+
+/**
+ * Clear Apollo cache
+ */
+LeadLib.clearApolloCache = function() {
+  const api = new LeadLib.ApolloAPI();
+  api.clearCache();
+};
+
+/**
+ * Get Apollo usage stats
+ * @returns {Object} Usage statistics
+ */
+LeadLib.getApolloUsageStats = function() {
+  const api = new LeadLib.ApolloAPI();
+  return api.getUsageStats();
+};

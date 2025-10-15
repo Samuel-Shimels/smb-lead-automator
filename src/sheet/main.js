@@ -1,25 +1,129 @@
 /**
- * Main Sheet-bound Script
+ * SMB Lead Automator - Main Sheet-bound Script
  * Handles menu creation, API calls, and data operations
+ * Uses LeadLib library for core functionality
  */
 
-// Global instances
-let apolloAPI, dataProcessor, sheetManager;
+// ===== CONFIGURATION =====
+
+function getSheetId() {
+  const id = PropertiesService.getScriptProperties().getProperty('SMB_LEAD_SHEET_ID');
+  if (!id) throw new Error('SMB_LEAD_SHEET_ID not set in Script Properties');
+  return id;
+}
+
+// ===== WEB APP ENTRY POINT =====
+
+function doGet(e) {
+  try {
+    return HtmlService.createHtmlOutputFromFile('index')
+      .setTitle('SMB Lead Automator - Modern Lead Generation')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT);
+  } catch (error) {
+    console.error('doGet error:', error);
+    return HtmlService.createHtmlOutput('<h1>Error loading app</h1><p>' + error.message + '</p>');
+  }
+}
 
 /**
- * Initialize the application
+ * XMLHttpRequest API Handler
+ * Provides async, non-blocking API for client-side XMLHttpRequest calls
  */
-function initializeApp() {
+function doPost(e) {
   try {
-    apolloAPI = new ApolloAPI();
-    dataProcessor = new DataProcessor();
-    sheetManager = new SheetManager();
+    let requestData;
     
-    console.log('Application initialized successfully');
-    return true;
+    // Parse incoming JSON request
+    if (e.postData && e.postData.contents) {
+      try {
+        requestData = JSON.parse(e.postData.contents);
+      } catch (parseError) {
+        return ContentService.createTextOutput(JSON.stringify({
+          success: false,
+          error: 'Invalid JSON in request body'
+        })).setMimeType(ContentService.MimeType.JSON);
+      }
+    } else {
+      return ContentService.createTextOutput(JSON.stringify({
+        success: false,
+        error: 'No request data provided'
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    const action = requestData.action;
+    const params = requestData.params || {};
+    
+    // Route to appropriate handler
+    let result;
+    switch(action) {
+      // Dashboard & Stats
+      case 'getStats':
+        result = getCachedStatsApi();
+        break;
+      case 'getQuickStats':
+        result = getQuickStatsApi();
+        break;
+        
+      // Leads
+      case 'listLeads':
+        result = listLeadsApi(params);
+        break;
+      case 'fetchLeads':
+        result = fetchLeadsApi(params);
+        break;
+      case 'updateLeadStatus':
+        result = updateLeadStatusApi(params.email, params.contacted);
+        break;
+        
+      // Settings
+      case 'getSettings':
+        result = getSettingsApi();
+        break;
+      case 'saveSettings':
+        result = saveSettingsApi(params.settings);
+        break;
+      case 'testApolloConnection':
+        result = testApolloConnectionApi(params.apiKey);
+        break;
+        
+      // Export
+      case 'exportToCSV':
+        result = exportToCSVApi(params);
+        break;
+        
+      // Cache Management
+      case 'clearCache':
+        result = clearCacheApi(params.cacheType);
+        break;
+      case 'warmCache':
+        result = warmCacheApi();
+        break;
+        
+      // Admin
+      case 'initSheets':
+        result = initSheetsApi();
+        break;
+      case 'clearAllLeads':
+        result = clearAllLeadsApi();
+        break;
+        
+      default:
+        result = {
+          success: false,
+          error: 'Unknown action: ' + action
+        };
+    }
+    
+    // Return JSON response
+    return ContentService.createTextOutput(JSON.stringify(result))
+      .setMimeType(ContentService.MimeType.JSON);
+      
   } catch (error) {
-    console.error('Error initializing application:', error);
-    return false;
+    console.error('doPost error:', error);
+    return ContentService.createTextOutput(JSON.stringify({
+      success: false,
+      error: error.message || 'Server error'
+    })).setMimeType(ContentService.MimeType.JSON);
   }
 }
 
@@ -43,29 +147,378 @@ function onOpen() {
     .addToUi();
 }
 
+// ===== INITIALIZATION API =====
+
+function initSheetsApi() {
+  try {
+    const spreadsheetId = getSheetId();
+    return LeadLib.initSheets(spreadsheetId);
+  } catch (error) {
+    console.error('initSheetsApi error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
 /**
  * Initialize both leads and settings sheets
  */
 function initializeSheets() {
   try {
-    if (!initializeApp()) {
-      SpreadsheetApp.getUi().alert('Error', 'Failed to initialize application', SpreadsheetApp.getUi().ButtonSet.OK);
-      return;
-    }
-
-    const leadsSuccess = sheetManager.initializeLeadsSheet();
-    const settingsSuccess = sheetManager.initializeSettingsSheet();
+    const result = initSheetsApi();
     
-    if (leadsSuccess && settingsSuccess) {
+    if (result.success) {
       SpreadsheetApp.getUi().alert('Success', 'Sheets initialized successfully!', SpreadsheetApp.getUi().ButtonSet.OK);
     } else {
-      SpreadsheetApp.getUi().alert('Warning', 'Some sheets may not have been initialized properly', SpreadsheetApp.getUi().ButtonSet.OK);
+      SpreadsheetApp.getUi().alert('Error', 'Failed to initialize sheets: ' + result.error, SpreadsheetApp.getUi().ButtonSet.OK);
     }
   } catch (error) {
     console.error('Error initializing sheets:', error);
     SpreadsheetApp.getUi().alert('Error', 'Failed to initialize sheets: ' + error.message, SpreadsheetApp.getUi().ButtonSet.OK);
   }
 }
+
+// ===== DASHBOARD API =====
+
+function getStatsApi() {
+  try {
+    const spreadsheetId = getSheetId();
+    return LeadLib.getStats(spreadsheetId);
+  } catch (error) {
+    console.error('getStatsApi error:', error);
+    return { error: error.message };
+  }
+}
+
+/**
+ * Get cached dashboard stats (1-hour cache, much faster than getStatsApi)
+ */
+function getCachedStatsApi() {
+  try {
+    const spreadsheetId = getSheetId();
+    if (typeof LeadLib !== 'undefined' && LeadLib.getCachedStats) {
+      const stats = LeadLib.getCachedStats(spreadsheetId, false);
+      console.log('Stats loaded (execution time: ' + (stats.executionTime || 0) + 'ms)');
+      return stats;
+    }
+    return getStatsApi();
+  } catch (error) {
+    console.error('getCachedStatsApi error:', error);
+    return getStatsApi();
+  }
+}
+
+/**
+ * ULTRA-FAST stats - only row counts (instant!)
+ */
+function getQuickStatsApi() {
+  try {
+    const spreadsheetId = getSheetId();
+    if (typeof LeadLib !== 'undefined' && LeadLib.getQuickStats) {
+      return LeadLib.getQuickStats(spreadsheetId);
+    }
+    return getCachedStatsApi();
+  } catch (error) {
+    console.error('getQuickStatsApi error:', error);
+    return getCachedStatsApi();
+  }
+}
+
+// ===== LEADS API =====
+
+/**
+ * List leads with caching for better performance
+ */
+function listLeadsApi(params) {
+  try {
+    const spreadsheetId = getSheetId();
+    
+    // Try to use cached full list first
+    const cacheKey = 'leads_full_list';
+    const cache = CacheService.getScriptCache();
+    let leads;
+    
+    const cached = cache.get(cacheKey);
+    if (cached && !params.forceRefresh) {
+      leads = JSON.parse(cached);
+      console.log('Leads loaded from cache');
+    } else {
+      // Fetch from sheet using LeadLib
+      if (typeof LeadLib !== 'undefined' && LeadLib.getLeads) {
+        leads = LeadLib.getLeads(spreadsheetId, params);
+      } else {
+        // Fallback to direct sheet access
+        const ss = SpreadsheetApp.openById(spreadsheetId);
+        const sheet = ss.getSheetByName('Leads');
+        
+        if (!sheet || sheet.getLastRow() < 2) {
+          return { rows: [], total: 0 };
+        }
+        
+        const data = sheet.getDataRange().getValues();
+        const headers = data[0];
+        const rows = data.slice(1);
+        
+        leads = rows.map(function(row) {
+          const obj = {};
+          headers.forEach(function(header, idx) {
+            obj[header] = row[idx];
+          });
+          return obj;
+        });
+      }
+      
+      // Cache for 10 minutes
+      try {
+        cache.put(cacheKey, JSON.stringify(leads), 600);
+      } catch (e) {
+        console.warn('Could not cache leads:', e);
+      }
+    }
+    
+    const page = params.page || 1;
+    const pageSize = params.pageSize || 10;
+    const start = (page - 1) * pageSize;
+    const end = start + pageSize;
+    
+    return {
+      rows: leads.slice(start, end),
+      total: leads.length,
+      page: page,
+      pageSize: pageSize
+    };
+  } catch (error) {
+    console.error('listLeadsApi error:', error);
+    return { rows: [], total: 0, error: error.message };
+  }
+}
+
+function fetchLeadsApi(params) {
+  try {
+    const spreadsheetId = getSheetId();
+    
+    // Validate API key
+    const apiKey = PropertiesService.getUserProperties().getProperty('APOLLO_API_KEY');
+    if (!apiKey) {
+      return { success: false, message: 'Please set your Apollo API key in Settings' };
+    }
+
+    // Use LeadLib to fetch leads
+    if (typeof LeadLib !== 'undefined' && LeadLib.fetchLeads) {
+      const result = LeadLib.fetchLeads(spreadsheetId, params, apiKey);
+      
+      // Invalidate cache after new data
+      CacheService.getScriptCache().remove('leads_full_list');
+      
+      return result;
+    } else {
+      return { success: false, message: 'LeadLib not available' };
+    }
+  } catch (error) {
+    console.error('fetchLeadsApi error:', error);
+    return { success: false, message: 'Error fetching leads: ' + error.message };
+  }
+}
+
+function updateLeadStatusApi(email, contacted) {
+  try {
+    const spreadsheetId = getSheetId();
+    
+    if (typeof LeadLib !== 'undefined' && LeadLib.updateLeadStatus) {
+      const result = LeadLib.updateLeadStatus(spreadsheetId, email, contacted);
+      
+      // Invalidate cache after update
+      CacheService.getScriptCache().remove('leads_full_list');
+      
+      return result;
+    } else {
+      return { success: false, message: 'LeadLib not available' };
+    }
+  } catch (error) {
+    console.error('updateLeadStatusApi error:', error);
+    return { success: false, message: 'Error updating lead status: ' + error.message };
+  }
+}
+
+// ===== SETTINGS API =====
+
+function getSettingsApi() {
+  try {
+    const spreadsheetId = getSheetId();
+    
+    if (typeof LeadLib !== 'undefined' && LeadLib.getSettings) {
+      return LeadLib.getSettings(spreadsheetId);
+    } else {
+      // Fallback to direct sheet access
+      const ss = SpreadsheetApp.openById(spreadsheetId);
+      const sheet = ss.getSheetByName('Settings');
+      
+      if (!sheet || sheet.getLastRow() < 2) {
+        return { success: true, settings: {} };
+      }
+      
+      const data = sheet.getDataRange().getValues();
+      const settings = {};
+      
+      for (let i = 1; i < data.length; i++) {
+        settings[data[i][0]] = data[i][1];
+      }
+      
+      return { success: true, settings: settings };
+    }
+  } catch (error) {
+    console.error('getSettingsApi error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+function saveSettingsApi(settings) {
+  try {
+    const spreadsheetId = getSheetId();
+    
+    if (typeof LeadLib !== 'undefined' && LeadLib.saveSettings) {
+      const result = LeadLib.saveSettings(spreadsheetId, settings);
+      
+      // If API key is being updated, also update in PropertiesService
+      if (settings['Apollo API Key']) {
+        PropertiesService.getUserProperties().setProperty('APOLLO_API_KEY', settings['Apollo API Key']);
+      }
+      
+      return result;
+    } else {
+      return { success: false, message: 'LeadLib not available' };
+    }
+  } catch (error) {
+    console.error('saveSettingsApi error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+function testApolloConnectionApi(apiKey) {
+  try {
+    if (!apiKey) {
+      return { success: false, message: 'API key is required' };
+    }
+
+    // Set the API key temporarily
+    PropertiesService.getUserProperties().setProperty('APOLLO_API_KEY', apiKey);
+    
+    // Test with LeadLib
+    if (typeof LeadLib !== 'undefined' && LeadLib.testApolloConnection) {
+      return LeadLib.testApolloConnection(apiKey);
+    } else {
+      return { success: false, message: 'LeadLib not available' };
+    }
+  } catch (error) {
+    console.error('testApolloConnectionApi error:', error);
+    return { success: false, message: 'Connection failed: ' + error.message };
+  }
+}
+
+// ===== EXPORT API =====
+
+function exportToCSVApi(params) {
+  try {
+    const spreadsheetId = getSheetId();
+    
+    if (typeof LeadLib !== 'undefined' && LeadLib.exportToCSV) {
+      return LeadLib.exportToCSV(spreadsheetId, params);
+    } else {
+      return { success: false, message: 'LeadLib not available' };
+    }
+  } catch (error) {
+    console.error('exportToCSVApi error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// ===== CACHE MANAGEMENT API =====
+
+/**
+ * Warm cache - preload frequently accessed data for instant performance
+ */
+function warmCacheApi() {
+  try {
+    const startTime = new Date().getTime();
+    const spreadsheetId = getSheetId();
+    
+    console.log('Warming all caches...');
+    
+    // Warm library caches
+    if (typeof LeadLib !== 'undefined' && LeadLib.warmCache) {
+      LeadLib.warmCache(spreadsheetId);
+    }
+    
+    // Preload list caches
+    listLeadsApi({ page: 1, pageSize: 10 });
+    console.log('✓ Leads list cached');
+    
+    const endTime = new Date().getTime();
+    const totalTime = endTime - startTime;
+    
+    console.log('All caches warmed in ' + totalTime + 'ms');
+    
+    return { 
+      success: true, 
+      message: 'All caches warmed successfully', 
+      executionTime: totalTime 
+    };
+  } catch (error) {
+    console.error('warmCacheApi error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Clear cache by type
+ */
+function clearCacheApi(cacheType) {
+  try {
+    if (typeof LeadLib !== 'undefined' && LeadLib.clearCache) {
+      return LeadLib.clearCache(cacheType || 'all');
+    }
+    
+    // Fallback to direct cache clearing
+    const cache = CacheService.getScriptCache();
+    
+    switch(cacheType) {
+      case 'leads':
+        cache.remove('leads_full_list');
+        break;
+      case 'all':
+        cache.remove('leads_full_list');
+        break;
+    }
+    
+    return { success: true, message: 'Cache cleared successfully' };
+  } catch (error) {
+    console.error('clearCacheApi error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// ===== ADMIN API =====
+
+function clearAllLeadsApi() {
+  try {
+    const spreadsheetId = getSheetId();
+    
+    if (typeof LeadLib !== 'undefined' && LeadLib.clearAllLeads) {
+      const result = LeadLib.clearAllLeads(spreadsheetId);
+      
+      // Invalidate cache after clearing
+      CacheService.getScriptCache().remove('leads_full_list');
+      
+      return result;
+    } else {
+      return { success: false, message: 'LeadLib not available' };
+    }
+  } catch (error) {
+    console.error('clearAllLeadsApi error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// ===== UI DIALOG FUNCTIONS =====
 
 /**
  * Show fetch leads dialog
@@ -76,99 +529,6 @@ function showFetchLeadsDialog() {
     .setHeight(500);
   
   SpreadsheetApp.getUi().showModalDialog(html, 'Fetch Leads');
-}
-
-/**
- * Fetch leads with filters
- * @param {Object} filters - Filter criteria
- * @returns {Object} Result object
- */
-function fetchLeads(filters) {
-  try {
-    if (!initializeApp()) {
-      return { success: false, message: 'Failed to initialize application' };
-    }
-
-    // Validate API key
-    const apiKey = sheetManager.getSetting('Apollo API Key');
-    if (!apiKey) {
-      return { success: false, message: 'Please set your Apollo API key in Settings' };
-    }
-
-    // Set API key
-    PropertiesService.getUserProperties().setProperty('APOLLO_API_KEY', apiKey);
-
-    // Fetch leads from Apollo
-    const rawLeads = apolloAPI.fetchLeads(filters);
-    
-    if (!rawLeads || rawLeads.length === 0) {
-      return { success: false, message: 'No leads found with the specified criteria' };
-    }
-
-    // Clean and validate leads
-    const cleanedLeads = dataProcessor.cleanLeads(rawLeads);
-    
-    if (cleanedLeads.length === 0) {
-      return { success: false, message: 'No valid leads found after cleaning' };
-    }
-
-    // Append to sheet
-    const appendSuccess = sheetManager.appendLeads(cleanedLeads);
-    
-    if (appendSuccess) {
-      return { 
-        success: true, 
-        message: `Successfully fetched and added ${cleanedLeads.length} leads`,
-        leadsCount: cleanedLeads.length
-      };
-    } else {
-      return { success: false, message: 'Failed to save leads to sheet' };
-    }
-
-  } catch (error) {
-    console.error('Error fetching leads:', error);
-    return { success: false, message: 'Error fetching leads: ' + error.message };
-  }
-}
-
-/**
- * Refresh all leads (re-fetch with current filters)
- */
-function refreshAllLeads() {
-  try {
-    const response = SpreadsheetApp.getUi().alert(
-      'Refresh All Leads',
-      'This will clear all existing leads and fetch new ones. Continue?',
-      SpreadsheetApp.getUi().ButtonSet.YES_NO
-    );
-
-    if (response === SpreadsheetApp.getUi().Button.YES) {
-      if (!initializeApp()) {
-        SpreadsheetApp.getUi().alert('Error', 'Failed to initialize application', SpreadsheetApp.getUi().ButtonSet.OK);
-        return;
-      }
-
-      // Clear existing leads
-      sheetManager.clearLeads();
-
-      // Fetch with default filters
-      const defaultFilters = {
-        roles: ['CEO', 'Owner', 'Founder', 'President'],
-        perPage: 50
-      };
-
-      const result = fetchLeads(defaultFilters);
-      
-      if (result.success) {
-        SpreadsheetApp.getUi().alert('Success', result.message, SpreadsheetApp.getUi().ButtonSet.OK);
-      } else {
-        SpreadsheetApp.getUi().alert('Error', result.message, SpreadsheetApp.getUi().ButtonSet.OK);
-      }
-    }
-  } catch (error) {
-    console.error('Error refreshing leads:', error);
-    SpreadsheetApp.getUi().alert('Error', 'Failed to refresh leads: ' + error.message, SpreadsheetApp.getUi().ButtonSet.OK);
-  }
 }
 
 /**
@@ -192,34 +552,17 @@ function openWebInterface() {
  */
 function exportToCSV() {
   try {
-    if (!initializeApp()) {
-      SpreadsheetApp.getUi().alert('Error', 'Failed to initialize application', SpreadsheetApp.getUi().ButtonSet.OK);
-      return;
+    const result = exportToCSVApi({});
+    
+    if (result.success) {
+      SpreadsheetApp.getUi().alert(
+        'Export Complete',
+        `CSV file exported successfully!\n\nFile: ${result.fileName}\nURL: ${result.fileUrl}`,
+        SpreadsheetApp.getUi().ButtonSet.OK
+      );
+    } else {
+      SpreadsheetApp.getUi().alert('Error', result.message, SpreadsheetApp.getUi().ButtonSet.OK);
     }
-
-    const leads = sheetManager.getLeads();
-    
-    if (leads.length === 0) {
-      SpreadsheetApp.getUi().alert('Info', 'No leads to export', SpreadsheetApp.getUi().ButtonSet.OK);
-      return;
-    }
-
-    const csvContent = dataProcessor.exportToCSV(leads);
-    
-    // Create a temporary file
-    const fileName = `SMB_Leads_${new Date().toISOString().split('T')[0]}.csv`;
-    const blob = Utilities.newBlob(csvContent, 'text/csv', fileName);
-    
-    // Save to Drive
-    const file = DriveApp.createFile(blob);
-    const fileUrl = file.getUrl();
-    
-    SpreadsheetApp.getUi().alert(
-      'Export Complete',
-      `CSV file exported successfully!\n\nFile: ${fileName}\nURL: ${fileUrl}`,
-      SpreadsheetApp.getUi().ButtonSet.OK
-    );
-    
   } catch (error) {
     console.error('Error exporting CSV:', error);
     SpreadsheetApp.getUi().alert('Error', 'Failed to export CSV: ' + error.message, SpreadsheetApp.getUi().ButtonSet.OK);
@@ -238,17 +581,12 @@ function clearAllLeads() {
     );
 
     if (response === SpreadsheetApp.getUi().Button.YES) {
-      if (!initializeApp()) {
-        SpreadsheetApp.getUi().alert('Error', 'Failed to initialize application', SpreadsheetApp.getUi().ButtonSet.OK);
-        return;
-      }
-
-      const success = sheetManager.clearLeads();
+      const result = clearAllLeadsApi();
       
-      if (success) {
+      if (result.success) {
         SpreadsheetApp.getUi().alert('Success', 'All leads cleared successfully', SpreadsheetApp.getUi().ButtonSet.OK);
       } else {
-        SpreadsheetApp.getUi().alert('Error', 'Failed to clear leads', SpreadsheetApp.getUi().ButtonSet.OK);
+        SpreadsheetApp.getUi().alert('Error', result.message, SpreadsheetApp.getUi().ButtonSet.OK);
       }
     }
   } catch (error) {
@@ -269,160 +607,41 @@ function showSettingsDialog() {
 }
 
 /**
- * Get leads data for web interface
- * @param {Object} filters - Filter criteria
- * @returns {Object} Leads data and statistics
+ * Refresh all leads (re-fetch with current filters)
  */
-function getLeadsData(filters = {}) {
+function refreshAllLeads() {
   try {
-    if (!initializeApp()) {
-      return { success: false, message: 'Failed to initialize application' };
-    }
+    const response = SpreadsheetApp.getUi().alert(
+      'Refresh All Leads',
+      'This will clear all existing leads and fetch new ones. Continue?',
+      SpreadsheetApp.getUi().ButtonSet.YES_NO
+    );
 
-    const leads = sheetManager.getLeads(filters);
-    const statistics = dataProcessor.getLeadStatistics(leads);
-    
-    return {
-      success: true,
-      leads: leads,
-      statistics: statistics,
-      total: leads.length
-    };
+    if (response === SpreadsheetApp.getUi().Button.YES) {
+      // Clear existing leads
+      const clearResult = clearAllLeadsApi();
+      
+      if (!clearResult.success) {
+        SpreadsheetApp.getUi().alert('Error', 'Failed to clear existing leads: ' + clearResult.message, SpreadsheetApp.getUi().ButtonSet.OK);
+        return;
+      }
+
+      // Fetch with default filters
+      const defaultFilters = {
+        roles: ['CEO', 'Owner', 'Founder', 'President'],
+        perPage: 50
+      };
+
+      const result = fetchLeadsApi(defaultFilters);
+      
+      if (result.success) {
+        SpreadsheetApp.getUi().alert('Success', result.message, SpreadsheetApp.getUi().ButtonSet.OK);
+      } else {
+        SpreadsheetApp.getUi().alert('Error', result.message, SpreadsheetApp.getUi().ButtonSet.OK);
+      }
+    }
   } catch (error) {
-    console.error('Error getting leads data:', error);
-    return { success: false, message: 'Error getting leads data: ' + error.message };
-  }
-}
-
-/**
- * Update lead contacted status
- * @param {String} email - Lead email
- * @param {Boolean} contacted - Contacted status
- * @returns {Object} Result object
- */
-function updateLeadStatus(email, contacted) {
-  try {
-    if (!initializeApp()) {
-      return { success: false, message: 'Failed to initialize application' };
-    }
-
-    const success = sheetManager.updateLeadContactedStatus(email, contacted);
-    
-    return {
-      success: success,
-      message: success ? 'Lead status updated successfully' : 'Lead not found'
-    };
-  } catch (error) {
-    console.error('Error updating lead status:', error);
-    return { success: false, message: 'Error updating lead status: ' + error.message };
-  }
-}
-
-/**
- * Save settings
- * @param {Object} settings - Settings object
- * @returns {Object} Result object
- */
-function saveSettings(settings) {
-  try {
-    if (!initializeApp()) {
-      return { success: false, message: 'Failed to initialize application' };
-    }
-
-    // Update each setting
-    Object.keys(settings).forEach(key => {
-      sheetManager.updateSetting(key, settings[key]);
-    });
-
-    // If API key is being updated, also update in PropertiesService
-    if (settings['Apollo API Key']) {
-      PropertiesService.getUserProperties().setProperty('APOLLO_API_KEY', settings['Apollo API Key']);
-    }
-
-    return { success: true, message: 'Settings saved successfully' };
-  } catch (error) {
-    console.error('Error saving settings:', error);
-    return { success: false, message: 'Error saving settings: ' + error.message };
-  }
-}
-
-/**
- * Get current settings
- * @returns {Object} Settings object
- */
-function getSettings() {
-  try {
-    if (!initializeApp()) {
-      return { success: false, message: 'Failed to initialize application' };
-    }
-
-    const settings = {
-      'Apollo API Key': sheetManager.getSetting('Apollo API Key'),
-      'Default Page Size': sheetManager.getSetting('Default Page Size'),
-      'Cache Duration': sheetManager.getSetting('Cache Duration'),
-      'Auto Refresh': sheetManager.getSetting('Auto Refresh'),
-      'Last Updated': sheetManager.getSetting('Last Updated'),
-      'Total Leads': sheetManager.getSetting('Total Leads')
-    };
-
-    return { success: true, settings: settings };
-  } catch (error) {
-    console.error('Error getting settings:', error);
-    return { success: false, message: 'Error getting settings: ' + error.message };
-  }
-}
-
-/**
- * Test Apollo.io API connection
- * @param {String} apiKey - API key to test
- * @returns {Object} Test result
- */
-function testApolloConnection(apiKey) {
-  try {
-    if (!apiKey) {
-      return { success: false, message: 'API key is required' };
-    }
-
-    // Set the API key temporarily
-    PropertiesService.getUserProperties().setProperty('APOLLO_API_KEY', apiKey);
-    
-    // Initialize Apollo API
-    const apollo = new ApolloAPI();
-    
-    // Test with a simple search
-    const testFilters = {
-      roles: ['CEO'],
-      perPage: 1
-    };
-
-    const leads = apollo.fetchLeads(testFilters);
-    
-    return { 
-      success: true, 
-      message: 'Connection successful',
-      leadsCount: leads ? leads.length : 0
-    };
-  } catch (error) {
-    console.error('Error testing Apollo connection:', error);
-    return { success: false, message: 'Connection failed: ' + error.message };
-  }
-}
-
-/**
- * Clear Apollo.io cache
- * @returns {Object} Result object
- */
-function clearApolloCache() {
-  try {
-    if (!initializeApp()) {
-      return { success: false, message: 'Failed to initialize application' };
-    }
-
-    apolloAPI.clearCache();
-    
-    return { success: true, message: 'Cache cleared successfully' };
-  } catch (error) {
-    console.error('Error clearing cache:', error);
-    return { success: false, message: 'Error clearing cache: ' + error.message };
+    console.error('Error refreshing leads:', error);
+    SpreadsheetApp.getUi().alert('Error', 'Failed to refresh leads: ' + error.message, SpreadsheetApp.getUi().ButtonSet.OK);
   }
 }

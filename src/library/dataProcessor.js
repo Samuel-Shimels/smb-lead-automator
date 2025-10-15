@@ -1,315 +1,498 @@
 /**
  * Data Processing Library
- * Handles data cleaning, validation, and transformation
+ * Handles data cleaning, validation, and export functionality
+ * LeadLib Library - Version 1
  */
 
-class DataProcessor {
-  constructor() {
-    this.emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// ===== LEADLIB NAMESPACE =====
+
+var LeadLib = LeadLib || {};
+
+LeadLib.DataProcessor = function() {
+  this.emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  this.nameRegex = /^[a-zA-Z\s\-\.]+$/;
+};
+
+/**
+ * Clean and validate leads data
+ * @param {Array} rawLeads - Raw leads from API
+ * @returns {Array} Cleaned and validated leads
+ */
+LeadLib.DataProcessor.prototype.cleanLeads = function(rawLeads) {
+  if (!Array.isArray(rawLeads)) {
+    console.warn('Invalid leads data provided');
+    return [];
   }
 
-  /**
-   * Clean and validate leads data
-   * @param {Array} rawLeads - Raw leads from API
-   * @returns {Array} Cleaned and validated leads
-   */
-  cleanLeads(rawLeads) {
-    if (!Array.isArray(rawLeads)) {
-      return [];
+  const cleanedLeads = [];
+  const seenEmails = new Set();
+  const seenNames = new Set();
+
+  rawLeads.forEach((lead, index) => {
+    try {
+      // Validate required fields
+      if (!lead.email || !this.isValidEmail(lead.email)) {
+        console.warn(`Lead ${index + 1}: Invalid email - ${lead.email}`);
+        return;
+      }
+
+      if (!lead.name || !this.isValidName(lead.name)) {
+        console.warn(`Lead ${index + 1}: Invalid name - ${lead.name}`);
+        return;
+      }
+
+      // Check for duplicates
+      if (seenEmails.has(lead.email.toLowerCase())) {
+        console.warn(`Lead ${index + 1}: Duplicate email - ${lead.email}`);
+        return;
+      }
+
+      if (seenNames.has(lead.name.toLowerCase())) {
+        console.warn(`Lead ${index + 1}: Duplicate name - ${lead.name}`);
+        return;
+      }
+
+      // Clean and format data
+      const cleanedLead = {
+        id: lead.id || this.generateLeadId(),
+        name: this.cleanName(lead.name),
+        title: this.cleanTitle(lead.title),
+        company: this.cleanCompany(lead.company),
+        industry: this.cleanIndustry(lead.industry),
+        employees: this.cleanEmployees(lead.employees),
+        foundedYear: this.cleanFoundedYear(lead.foundedYear),
+        email: lead.email.toLowerCase().trim(),
+        phone: this.cleanPhone(lead.phone),
+        location: this.cleanLocation(lead.location),
+        linkedin: this.cleanLinkedIn(lead.linkedin),
+        website: this.cleanWebsite(lead.website),
+        description: this.cleanDescription(lead.description),
+        lastUpdated: new Date().toISOString(),
+        contacted: false,
+        source: 'Apollo.io'
+      };
+
+      cleanedLeads.push(cleanedLead);
+      seenEmails.add(lead.email.toLowerCase());
+      seenNames.add(lead.name.toLowerCase());
+
+    } catch (error) {
+      console.error(`Error processing lead ${index + 1}:`, error);
     }
+  });
 
-    const cleanedLeads = rawLeads
-      .map(lead => this._cleanIndividualLead(lead))
-      .filter(lead => this._validateLead(lead))
-      .filter((lead, index, self) => this._deduplicateLead(lead, index, self));
+  console.log(`Cleaned ${cleanedLeads.length} leads from ${rawLeads.length} raw leads`);
+  return cleanedLeads;
+};
 
-    console.log(`Cleaned ${rawLeads.length} leads, ${cleanedLeads.length} valid leads remaining`);
-    return cleanedLeads;
+/**
+ * Validate email format
+ * @param {string} email - Email to validate
+ * @returns {boolean} Is valid email
+ */
+LeadLib.DataProcessor.prototype.isValidEmail = function(email) {
+  return this.emailRegex.test(email);
+};
+
+/**
+ * Validate name format
+ * @param {string} name - Name to validate
+ * @returns {boolean} Is valid name
+ */
+LeadLib.DataProcessor.prototype.isValidName = function(name) {
+  return this.nameRegex.test(name) && name.length > 1;
+};
+
+/**
+ * Clean and format name
+ * @param {string} name - Name to clean
+ * @returns {string} Cleaned name
+ */
+LeadLib.DataProcessor.prototype.cleanName = function(name) {
+  if (!name) return '';
+  
+  return name.trim()
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+};
+
+/**
+ * Clean and format title
+ * @param {string} title - Title to clean
+ * @returns {string} Cleaned title
+ */
+LeadLib.DataProcessor.prototype.cleanTitle = function(title) {
+  if (!title) return '';
+  
+  // Common title mappings
+  const titleMappings = {
+    'ceo': 'CEO',
+    'chief executive officer': 'CEO',
+    'owner': 'Owner',
+    'founder': 'Founder',
+    'president': 'President',
+    'coo': 'COO',
+    'chief operating officer': 'COO',
+    'cto': 'CTO',
+    'chief technology officer': 'CTO',
+    'cfo': 'CFO',
+    'chief financial officer': 'CFO'
+  };
+
+  const cleanTitle = title.toLowerCase().trim();
+  return titleMappings[cleanTitle] || title;
+};
+
+/**
+ * Clean and format company name
+ * @param {string} company - Company name to clean
+ * @returns {string} Cleaned company name
+ */
+LeadLib.DataProcessor.prototype.cleanCompany = function(company) {
+  if (!company) return '';
+  
+  return company.trim()
+    .replace(/\s+/g, ' ')
+    .replace(/[^\w\s\-\.&]/g, '');
+};
+
+/**
+ * Clean and format industry
+ * @param {string} industry - Industry to clean
+ * @returns {string} Cleaned industry
+ */
+LeadLib.DataProcessor.prototype.cleanIndustry = function(industry) {
+  if (!industry) return '';
+  
+  // Common industry mappings
+  const industryMappings = {
+    'technology': 'Technology',
+    'software': 'Software',
+    'healthcare': 'Healthcare',
+    'finance': 'Finance',
+    'retail': 'Retail',
+    'manufacturing': 'Manufacturing',
+    'education': 'Education',
+    'consulting': 'Consulting',
+    'real estate': 'Real Estate',
+    'automotive': 'Automotive'
+  };
+
+  const cleanIndustry = industry.toLowerCase().trim();
+  return industryMappings[cleanIndustry] || industry;
+};
+
+/**
+ * Clean and format employee count
+ * @param {number|string} employees - Employee count to clean
+ * @returns {number} Cleaned employee count
+ */
+LeadLib.DataProcessor.prototype.cleanEmployees = function(employees) {
+  if (!employees) return 0;
+  
+  const num = parseInt(employees);
+  return isNaN(num) ? 0 : Math.max(0, num);
+};
+
+/**
+ * Clean and format founded year
+ * @param {number|string} year - Founded year to clean
+ * @returns {number} Cleaned founded year
+ */
+LeadLib.DataProcessor.prototype.cleanFoundedYear = function(year) {
+  if (!year) return '';
+  
+  const num = parseInt(year);
+  const currentYear = new Date().getFullYear();
+  
+  if (isNaN(num) || num < 1800 || num > currentYear) {
+    return '';
   }
+  
+  return num;
+};
 
-  /**
-   * Clean individual lead data
-   * @param {Object} lead - Raw lead object
-   * @returns {Object} Cleaned lead object
-   */
-  _cleanIndividualLead(lead) {
+/**
+ * Clean and format phone number
+ * @param {string} phone - Phone number to clean
+ * @returns {string} Cleaned phone number
+ */
+LeadLib.DataProcessor.prototype.cleanPhone = function(phone) {
+  if (!phone) return '';
+  
+  // Remove all non-digit characters except + and -
+  return phone.replace(/[^\d\+\-]/g, '');
+};
+
+/**
+ * Clean and format location
+ * @param {string} location - Location to clean
+ * @returns {string} Cleaned location
+ */
+LeadLib.DataProcessor.prototype.cleanLocation = function(location) {
+  if (!location) return '';
+  
+  return location.trim()
+    .replace(/\s+/g, ' ')
+    .replace(/[^\w\s\-\,]/g, '');
+};
+
+/**
+ * Clean and format LinkedIn URL
+ * @param {string} linkedin - LinkedIn URL to clean
+ * @returns {string} Cleaned LinkedIn URL
+ */
+LeadLib.DataProcessor.prototype.cleanLinkedIn = function(linkedin) {
+  if (!linkedin) return '';
+  
+  // Ensure it starts with https://
+  if (!linkedin.startsWith('http')) {
+    return 'https://' + linkedin;
+  }
+  
+  return linkedin.trim();
+};
+
+/**
+ * Clean and format website URL
+ * @param {string} website - Website URL to clean
+ * @returns {string} Cleaned website URL
+ */
+LeadLib.DataProcessor.prototype.cleanWebsite = function(website) {
+  if (!website) return '';
+  
+  // Ensure it starts with https://
+  if (!website.startsWith('http')) {
+    return 'https://' + website;
+  }
+  
+  return website.trim();
+};
+
+/**
+ * Clean and format description
+ * @param {string} description - Description to clean
+ * @returns {string} Cleaned description
+ */
+LeadLib.DataProcessor.prototype.cleanDescription = function(description) {
+  if (!description) return '';
+  
+  return description.trim()
+    .replace(/\s+/g, ' ')
+    .substring(0, 500); // Limit to 500 characters
+};
+
+/**
+ * Generate unique lead ID
+ * @returns {string} Unique lead ID
+ */
+LeadLib.DataProcessor.prototype.generateLeadId = function() {
+  return 'lead_' + Utilities.getUuid();
+};
+
+/**
+ * Get lead statistics
+ * @param {Array} leads - Leads to analyze
+ * @returns {Object} Statistics object
+ */
+LeadLib.DataProcessor.prototype.getLeadStatistics = function(leads) {
+  if (!Array.isArray(leads) || leads.length === 0) {
     return {
-      id: lead.id || this._generateId(),
-      name: this._cleanName(lead.name),
-      title: this._cleanTitle(lead.title),
-      company: this._cleanCompanyName(lead.company),
-      sector: this._cleanSector(lead.sector),
-      employees: this._cleanNumber(lead.employees),
-      capital: this._cleanNumber(lead.capital),
-      yearFounded: this._cleanYear(lead.yearFounded),
-      email: this._cleanEmail(lead.email),
-      linkedinUrl: this._cleanUrl(lead.linkedinUrl),
-      phone: this._cleanPhone(lead.phone),
-      location: this._cleanLocation(lead.location),
-      website: this._cleanUrl(lead.website),
-      lastUpdated: new Date(),
-      contacted: false
+      total: 0,
+      contacted: 0,
+      notContacted: 0,
+      byIndustry: {},
+      byTitle: {},
+      byCompanySize: {}
     };
   }
 
-  /**
-   * Clean and format name
-   * @param {String} name - Raw name
-   * @returns {String} Cleaned name
-   */
-  _cleanName(name) {
-    if (!name || typeof name !== 'string') return '';
-    
-    return name
-      .trim()
-      .split(' ')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-      .join(' ');
-  }
+  const stats = {
+    total: leads.length,
+    contacted: 0,
+    notContacted: 0,
+    byIndustry: {},
+    byTitle: {},
+    byCompanySize: {}
+  };
 
-  /**
-   * Clean and format title
-   * @param {String} title - Raw title
-   * @returns {String} Cleaned title
-   */
-  _cleanTitle(title) {
-    if (!title || typeof title !== 'string') return '';
-    
-    const titleMap = {
-      'ceo': 'CEO',
-      'chief executive officer': 'CEO',
-      'owner': 'Owner',
-      'founder': 'Founder',
-      'president': 'President',
-      'co-founder': 'Co-Founder',
-      'cofounder': 'Co-Founder'
-    };
-
-    const cleanTitle = title.trim();
-    return titleMap[cleanTitle.toLowerCase()] || cleanTitle;
-  }
-
-  /**
-   * Clean company name
-   * @param {String} company - Raw company name
-   * @returns {String} Cleaned company name
-   */
-  _cleanCompanyName(company) {
-    if (!company || typeof company !== 'string') return '';
-    
-    return company.trim().replace(/\s+/g, ' ');
-  }
-
-  /**
-   * Clean sector/industry
-   * @param {String} sector - Raw sector
-   * @returns {String} Cleaned sector
-   */
-  _cleanSector(sector) {
-    if (!sector || typeof sector !== 'string') return 'Unknown';
-    
-    return sector.trim();
-  }
-
-  /**
-   * Clean and validate email
-   * @param {String} email - Raw email
-   * @returns {String} Cleaned email or empty string
-   */
-  _cleanEmail(email) {
-    if (!email || typeof email !== 'string') return '';
-    
-    const cleanEmail = email.trim().toLowerCase();
-    return this.emailRegex.test(cleanEmail) ? cleanEmail : '';
-  }
-
-  /**
-   * Clean phone number
-   * @param {String} phone - Raw phone
-   * @returns {String} Cleaned phone
-   */
-  _cleanPhone(phone) {
-    if (!phone || typeof phone !== 'string') return '';
-    
-    return phone.replace(/\D/g, ''); // Remove non-digits
-  }
-
-  /**
-   * Clean location
-   * @param {String} location - Raw location
-   * @returns {String} Cleaned location
-   */
-  _cleanLocation(location) {
-    if (!location || typeof location !== 'string') return '';
-    
-    return location.trim();
-  }
-
-  /**
-   * Clean URL
-   * @param {String} url - Raw URL
-   * @returns {String} Cleaned URL
-   */
-  _cleanUrl(url) {
-    if (!url || typeof url !== 'string') return '';
-    
-    const cleanUrl = url.trim();
-    return cleanUrl.startsWith('http') ? cleanUrl : `https://${cleanUrl}`;
-  }
-
-  /**
-   * Clean number values
-   * @param {Number|String} value - Raw number
-   * @returns {Number} Cleaned number
-   */
-  _cleanNumber(value) {
-    if (typeof value === 'number') return value;
-    if (typeof value === 'string') {
-      const num = parseFloat(value.replace(/[^\d.-]/g, ''));
-      return isNaN(num) ? 0 : num;
+  leads.forEach(lead => {
+    // Contacted status
+    if (lead.contacted) {
+      stats.contacted++;
+    } else {
+      stats.notContacted++;
     }
-    return 0;
+
+    // Industry distribution
+    const industry = lead.industry || 'Unknown';
+    stats.byIndustry[industry] = (stats.byIndustry[industry] || 0) + 1;
+
+    // Title distribution
+    const title = lead.title || 'Unknown';
+    stats.byTitle[title] = (stats.byTitle[title] || 0) + 1;
+
+    // Company size distribution
+    const employees = lead.employees || 0;
+    let sizeCategory = 'Unknown';
+    if (employees === 0) sizeCategory = 'Unknown';
+    else if (employees <= 10) sizeCategory = '1-10';
+    else if (employees <= 50) sizeCategory = '11-50';
+    else if (employees <= 200) sizeCategory = '51-200';
+    else if (employees <= 500) sizeCategory = '201-500';
+    else sizeCategory = '500+';
+
+    stats.byCompanySize[sizeCategory] = (stats.byCompanySize[sizeCategory] || 0) + 1;
+  });
+
+  return stats;
+};
+
+/**
+ * Export leads to CSV format
+ * @param {Array} leads - Leads to export
+ * @returns {string} CSV content
+ */
+LeadLib.DataProcessor.prototype.exportToCSV = function(leads) {
+  if (!Array.isArray(leads) || leads.length === 0) {
+    return 'No leads to export';
   }
 
-  /**
-   * Clean year value
-   * @param {Number|String} year - Raw year
-   * @returns {Number} Cleaned year
-   */
-  _cleanYear(year) {
-    const cleanYear = this._cleanNumber(year);
-    const currentYear = new Date().getFullYear();
-    
-    if (cleanYear < 1800 || cleanYear > currentYear) {
-      return null;
-    }
-    
-    return cleanYear;
-  }
+  // CSV headers
+  const headers = [
+    'ID', 'Name', 'Title', 'Company', 'Industry', 'Employees', 'Founded Year',
+    'Email', 'Phone', 'Location', 'LinkedIn', 'Website', 'Description',
+    'Contacted', 'Last Updated', 'Source'
+  ];
 
-  /**
-   * Validate lead data
-   * @param {Object} lead - Lead to validate
-   * @returns {Boolean} Is valid lead
-   */
-  _validateLead(lead) {
-    // Must have name and company
-    if (!lead.name || !lead.company) return false;
-    
-    // Must have valid email
-    if (!lead.email) return false;
-    
-    // Must have a valid title (CEO, Owner, etc.)
-    const validTitles = ['CEO', 'Owner', 'Founder', 'President', 'Co-Founder'];
-    if (!validTitles.includes(lead.title)) return false;
-    
-    return true;
-  }
+  // Build CSV content
+  let csvContent = headers.join(',') + '\n';
 
-  /**
-   * Deduplicate leads based on email
-   * @param {Object} lead - Current lead
-   * @param {Number} index - Current index
-   * @param {Array} leads - All leads
-   * @returns {Boolean} Is unique lead
-   */
-  _deduplicateLead(lead, index, leads) {
-    return leads.findIndex(l => l.email === lead.email) === index;
-  }
-
-  /**
-   * Generate unique ID for lead
-   * @returns {String} Unique ID
-   */
-  _generateId() {
-    return Utilities.getUuid();
-  }
-
-  /**
-   * Export leads to CSV format
-   * @param {Array} leads - Leads to export
-   * @returns {String} CSV content
-   */
-  exportToCSV(leads) {
-    if (!leads || leads.length === 0) return '';
-    
-    const headers = [
-      'Timestamp', 'Lead Name', 'Title', 'Company Name', 'Sector',
-      'Employees', 'Capital', 'Year Founded', 'Email', 'Phone',
-      'Location', 'Website', 'LinkedIn', 'Contacted'
+  leads.forEach(lead => {
+    const row = [
+      lead.id || '',
+      `"${(lead.name || '').replace(/"/g, '""')}"`,
+      `"${(lead.title || '').replace(/"/g, '""')}"`,
+      `"${(lead.company || '').replace(/"/g, '""')}"`,
+      `"${(lead.industry || '').replace(/"/g, '""')}"`,
+      lead.employees || 0,
+      lead.foundedYear || '',
+      lead.email || '',
+      lead.phone || '',
+      `"${(lead.location || '').replace(/"/g, '""')}"`,
+      lead.linkedin || '',
+      lead.website || '',
+      `"${(lead.description || '').replace(/"/g, '""')}"`,
+      lead.contacted ? 'Yes' : 'No',
+      lead.lastUpdated || '',
+      lead.source || ''
     ];
     
-    const csvRows = [headers.join(',')];
-    
-    leads.forEach(lead => {
-      const row = [
-        lead.lastUpdated.toISOString(),
-        `"${lead.name}"`,
-        `"${lead.title}"`,
-        `"${lead.company}"`,
-        `"${lead.sector}"`,
-        lead.employees,
-        lead.capital,
-        lead.yearFounded || '',
-        lead.email,
-        lead.phone,
-        `"${lead.location}"`,
-        lead.website,
-        lead.linkedinUrl,
-        lead.contacted ? 'Yes' : 'No'
-      ];
-      csvRows.push(row.join(','));
-    });
-    
-    return csvRows.join('\n');
+    csvContent += row.join(',') + '\n';
+  });
+
+  return csvContent;
+};
+
+/**
+ * Filter leads based on criteria
+ * @param {Array} leads - Leads to filter
+ * @param {Object} filters - Filter criteria
+ * @returns {Array} Filtered leads
+ */
+LeadLib.DataProcessor.prototype.filterLeads = function(leads, filters) {
+  if (!Array.isArray(leads) || leads.length === 0) {
+    return [];
   }
 
-  /**
-   * Get lead statistics
-   * @param {Array} leads - Leads to analyze
-   * @returns {Object} Statistics object
-   */
-  getLeadStatistics(leads) {
-    if (!leads || leads.length === 0) {
-      return {
-        total: 0,
-        bySector: {},
-        byTitle: {},
-        contacted: 0,
-        notContacted: 0
-      };
+  return leads.filter(lead => {
+    // Industry filter
+    if (filters.industry && lead.industry !== filters.industry) {
+      return false;
     }
 
-    const stats = {
-      total: leads.length,
-      bySector: {},
-      byTitle: {},
-      contacted: 0,
-      notContacted: 0
-    };
+    // Title filter
+    if (filters.title && lead.title !== filters.title) {
+      return false;
+    }
 
-    leads.forEach(lead => {
-      // Count by sector
-      const sector = lead.sector || 'Unknown';
-      stats.bySector[sector] = (stats.bySector[sector] || 0) + 1;
-      
-      // Count by title
-      const title = lead.title || 'Unknown';
-      stats.byTitle[title] = (stats.byTitle[title] || 0) + 1;
-      
-      // Count contacted status
-      if (lead.contacted) {
-        stats.contacted++;
-      } else {
-        stats.notContacted++;
+    // Company size filter
+    if (filters.companySize) {
+      const employees = lead.employees || 0;
+      let sizeCategory = 'Unknown';
+      if (employees === 0) sizeCategory = 'Unknown';
+      else if (employees <= 10) sizeCategory = '1-10';
+      else if (employees <= 50) sizeCategory = '11-50';
+      else if (employees <= 200) sizeCategory = '51-200';
+      else if (employees <= 500) sizeCategory = '201-500';
+      else sizeCategory = '500+';
+
+      if (sizeCategory !== filters.companySize) {
+        return false;
       }
-    });
+    }
 
-    return stats;
-  }
-}
+    // Contacted status filter
+    if (filters.contacted !== undefined && lead.contacted !== filters.contacted) {
+      return false;
+    }
 
-// Export for use in other files
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = DataProcessor;
-}
+    // Search term filter
+    if (filters.searchTerm) {
+      const searchTerm = filters.searchTerm.toLowerCase();
+      const searchableText = [
+        lead.name, lead.title, lead.company, lead.industry, lead.email
+      ].join(' ').toLowerCase();
+
+      if (!searchableText.includes(searchTerm)) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+};
+
+// ===== CONVENIENCE FUNCTIONS =====
+
+/**
+ * Clean leads with default processor
+ * @param {Array} rawLeads - Raw leads to clean
+ * @returns {Array} Cleaned leads
+ */
+LeadLib.cleanLeads = function(rawLeads) {
+  const processor = new LeadLib.DataProcessor();
+  return processor.cleanLeads(rawLeads);
+};
+
+/**
+ * Get lead statistics
+ * @param {Array} leads - Leads to analyze
+ * @returns {Object} Statistics
+ */
+LeadLib.getLeadStatistics = function(leads) {
+  const processor = new LeadLib.DataProcessor();
+  return processor.getLeadStatistics(leads);
+};
+
+/**
+ * Export leads to CSV
+ * @param {Array} leads - Leads to export
+ * @returns {string} CSV content
+ */
+LeadLib.exportToCSV = function(leads) {
+  const processor = new LeadLib.DataProcessor();
+  return processor.exportToCSV(leads);
+};
+
+/**
+ * Filter leads
+ * @param {Array} leads - Leads to filter
+ * @param {Object} filters - Filter criteria
+ * @returns {Array} Filtered leads
+ */
+LeadLib.filterLeads = function(leads, filters) {
+  const processor = new LeadLib.DataProcessor();
+  return processor.filterLeads(leads, filters);
+};
